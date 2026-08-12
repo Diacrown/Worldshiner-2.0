@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World Shiner 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  :root{
+    --bg:#f3f5f8; --s1:#ffffff; --s2:#f8f9fb; --s3:#e2e6ec;
+    --accent:#28466b; --accent2:#1b3450; --text:#1b2432; --text2:#647085;
+    --border:#e2e6ec; --green:#1e7e4e; --red:#c0392b; --orange:#b8791c;
+    --rad:6px; --sidebar-w:220px; --sidebar-w-collapsed:64px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
+  h1,h2,.brand{font-family:'Inter',system-ui,sans-serif;font-weight:700}
+  button{font-family:inherit;cursor:pointer;border:0;border-radius:var(--rad);padding:9px 16px;font-size:14px;font-weight:600}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent2)}
+  .btn-ghost{background:var(--s3);color:var(--text)}
+  .btn-ghost:hover{background:#ddd0cc}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-danger{background:#f8d9d3;color:var(--red)}
+  input,select,textarea{font-family:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--rad);background:var(--s2);width:100%}
+  label{font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px}
+
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .login-card{background:var(--s1);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:36px;width:100%;max-width:360px}
+  .login-card h1{font-size:22px;color:var(--accent);margin-bottom:2px}
+  .login-card p{font-size:13px;color:var(--text2);margin-bottom:20px}
+  .login-card .field{margin-bottom:12px}
+  .login-card button{width:100%;margin-top:6px}
+  .err{color:var(--red);font-size:13px;margin-top:10px}
+
+  #app{display:none}
+  .app-shell{display:flex;min-height:100vh}
+  .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--accent);color:#fff;display:flex;flex-direction:column;transition:width .15s ease}
+  .sidebar.collapsed{width:var(--sidebar-w-collapsed)}
+  .sidebar-brand{display:flex;align-items:center;justify-content:space-between;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.12)}
+  .sidebar-brand .brand{font-size:16px;color:#fff;white-space:nowrap;overflow:hidden}
+  .sidebar.collapsed .sidebar-brand .brand{display:none}
+  .sidebar-brand button{background:none;color:#fff;padding:4px 8px;font-size:16px}
+  .navlist{display:flex;flex-direction:column;padding:10px;gap:2px}
+  .nav-item{display:flex;align-items:center;gap:10px;background:none;color:rgba(255,255,255,.78);text-align:left;padding:10px 12px;border-radius:var(--rad);font-weight:500;white-space:nowrap;overflow:hidden}
+  .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+  .nav-item.active{background:rgba(255,255,255,.16);color:#fff}
+  .sidebar.collapsed .nav-item span{display:none}
+  .main-wrap{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{background:var(--s1);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:14px}
+  .topbar .who{font-size:12px;color:var(--text2);margin-left:auto}
+  .topbar select{width:auto;max-width:180px}
+  main{padding:24px;max-width:1200px;width:100%;margin:0 auto}
+  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+  .toolbar input[type=text]{max-width:260px}
+  .toolbar select{width:auto}
+  .toolbar .spacer{flex:1}
+  .mobile-nav-toggle{display:none;background:none;color:var(--text);padding:6px}
+  @media (max-width:900px){
+    .sidebar{position:fixed;z-index:40;height:100vh;transform:translateX(-100%)}
+    .sidebar.mobile-open{transform:translateX(0)}
+    .mobile-nav-toggle{display:inline-block}
+    .grid2{grid-template-columns:1fr}
+    table{display:block;overflow-x:auto;white-space:nowrap}
+  }
+
+  table{width:100%;border-collapse:collapse;background:var(--s1);border-radius:var(--rad);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--s3)}
+  th{background:var(--s2);color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+  tr:last-child td{border-bottom:0}
+  tr.job-row{cursor:pointer}
+  tr.job-row:hover{background:var(--s2)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+  .badge.High{background:#f8d9d3;color:var(--red)}
+  .badge.Medium{background:#f5e6cc;color:var(--orange)}
+  .badge.Low{background:#dde8d8;color:var(--green)}
+  .badge.open{background:#f8d9d3;color:var(--red)}
+  .badge.resolved{background:#dde8d8;color:var(--green)}
+  .badge.sla-mild{background:#f5e6cc;color:var(--orange)}
+  .badge.sla-severe{background:#f8d9d3;color:var(--red)}
+  .unread-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px}
+  select.status-inline{font-size:12px;padding:4px 6px;border-radius:8px}
+  .empty{padding:40px;text-align:center;color:var(--text2)}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;z-index:50}
+  .overlay.open{display:flex}
+  .sheet{background:var(--s1);border-radius:14px;padding:24px;width:100%;max-width:560px}
+  .sheet.wide{max-width:680px}
+  .sheet h2{font-size:17px;color:var(--accent);margin-bottom:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid2 .full{grid-column:1/-1}
+  .sheet .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .checkline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+  .checkline input{width:auto}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--s3);margin:16px 0}
+  .tabs button{background:none;border-radius:0;padding:8px 12px;font-size:13px;color:var(--text2);border-bottom:2px solid transparent}
+  .tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabpane{display:none}
+  .tabpane.active{display:block}
+
+  .history-item,.issue-item{padding:10px 0;border-bottom:1px solid var(--s3);font-size:13px}
+  .history-item:last-child,.issue-item:last-child{border-bottom:0}
+  .meta{color:var(--text2);font-size:11px}
+  .issue-item .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+  .chat-thread{max-height:280px;overflow-y:auto;border:1px solid var(--s3);border-radius:var(--rad);padding:10px;margin-bottom:10px;background:var(--s2)}
+  .chat-msg{margin-bottom:10px;font-size:13px}
+  .chat-msg .meta{margin-bottom:2px}
+  .chat-send{display:flex;gap:8px}
+  .chat-send textarea{flex:1;resize:none}
+
+  .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:10px}
+  .img-grid .thumb{position:relative;border-radius:6px;overflow:hidden;aspect-ratio:1}
+  .img-grid img{width:100%;height:100%;object-fit:cover;display:block}
+  .img-grid .del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px;text-align:center;padding:0}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:100;display:none;max-width:90vw}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>World Shiner</h1>
+    <p>Sign in to your office's job tracker.</p>
+    <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@worldshiner.com"></div>
+    <div class="field"><label>Password</label><input id="loginPassword" type="password"></div>
+    <button class="btn-primary" id="loginBtn">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><span class="brand">💎 World Shiner</span><button id="sidebarToggle" title="Collapse">☰</button></div>
+      <nav class="navlist">
+        <button data-view="jobs" class="nav-item active">📋 <span>Jobs</span></button>
+        <button data-view="sla" class="nav-item" style="display:none">⏱ <span>SLA Alerts</span></button>
+        <button data-view="reports" class="nav-item" style="display:none">📊 <span>Reports</span></button>
+        <button data-view="staff" class="nav-item" style="display:none">👥 <span>Staff</span></button>
+        <button data-view="import" class="nav-item" style="display:none">📥 <span>Import</span></button>
+        <button data-view="mail" class="nav-item" style="display:none">✉️ <span>Mail</span></button>
+      </nav>
+    </aside>
+    <div class="main-wrap">
+      <div class="topbar">
+        <button class="mobile-nav-toggle" id="mobileNavToggle">☰</button>
+        <select id="officeSwitcher" style="display:none"></select>
+        <span class="who" id="whoAmI"></span>
+        <button class="btn-ghost" id="signOutBtn">Sign out</button>
+      </div>
+      <main>
+
+        <div id="jobsView">
+          <div class="toolbar">
+            <input type="text" id="searchInput" placeholder="Search job name, contact, PO…">
+            <select id="statusFilter"><option value="">All statuses</option></select>
+            <span class="spacer"></span>
+            <button class="btn-primary" id="newJobBtn">+ New Job</button>
+          </div>
+          <table id="jobsTable">
+            <thead><tr><th>Job</th><th>Contact</th><th>Priority</th><th>Status</th><th>PO #</th><th>Delivery</th><th></th></tr></thead>
+            <tbody id="jobsBody"></tbody>
+          </table>
+          <div class="empty" id="emptyState" style="display:none">No jobs yet — create the first one.</div>
+        </div>
+
+        <div id="slaView" style="display:none">
+          <div class="toolbar"><h2 style="font-size:16px">SLA Alerts</h2></div>
+          <table>
+            <thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Status</th><th>SLA Rule</th><th>Time in status</th><th>Threshold</th><th>Overage</th></tr></thead>
+            <tbody id="slaBody"></tbody>
+          </table>
+          <div class="empty" id="slaEmptyState" style="display:none">No SLA breaches right now.</div>
+        </div>
+        <div id="reportsView" style="display:none">
+          <div class="toolbar">
+            <input type="month" id="rep_month">
+            <select id="rep_office" style="width:auto"></select>
+            <button class="btn-ghost" id="rep_generateBtn">Generate</button>
+            <span class="spacer"></span>
+            <button class="btn-primary" id="rep_downloadBtn">Download PDF</button>
+          </div>
+          <div id="reportCards"></div>
+        </div>
+        <div id="importView" style="display:none">
+          <div id="imp_step1">
+            <h2 style="font-size:16px;margin-bottom:12px">Import jobs from Excel/CSV</h2>
+            <div class="grid2">
+              <div><label>Target office</label><select id="imp_office"></select></div>
+              <div><label>File (.csv or .xlsx)</label><input type="file" id="imp_fileInput" accept=".csv,.xlsx"></div>
+            </div>
+            <div class="actions"><button class="btn-primary" id="imp_previewBtn">Preview</button></div>
+          </div>
+          <div id="imp_step2" style="display:none">
+            <h2 style="font-size:16px;margin-bottom:12px">Review column mapping</h2>
+            <table><thead><tr id="imp_mappingHeader"></tr></thead><tbody id="imp_mappingBody"></tbody></table>
+            <h2 style="font-size:14px;margin:16px 0 8px">Preview rows</h2>
+            <table><thead><tr id="imp_sampleHeader"></tr></thead><tbody id="imp_sampleBody"></tbody></table>
+            <div class="actions">
+              <button class="btn-ghost" id="imp_cancelBtn">Cancel</button>
+              <button class="btn-primary" id="imp_commitBtn">Confirm &amp; Import</button>
+            </div>
+          </div>
+          <div id="imp_step3" style="display:none">
+            <h2 style="font-size:16px;margin-bottom:12px">Import summary</h2>
+            <div id="imp_summary"></div>
+            <div class="actions"><button class="btn-ghost" id="imp_doneBtn">Import another file</button></div>
+          </div>
+        </div>
+        <div id="mailView" style="display:none">
+          <h2 style="font-size:16px;margin-bottom:12px">Mail</h2>
+          <div id="mail_status" class="sheet" style="max-width:none;padding:16px;margin-bottom:16px"></div>
+          <div id="mail_actions" style="display:none">
+            <div class="grid2">
+              <div class="full"><label>To</label><input id="mail_to"></div>
+              <div class="full"><label>Subject</label><input id="mail_subject"></div>
+              <div class="full"><label>Message</label><textarea id="mail_body" rows="4"></textarea></div>
+            </div>
+            <div class="actions"><button class="btn-primary btn-sm" id="mail_sendBtn">Send</button></div>
+          </div>
+        </div>
+
+        <div id="staffView" style="display:none">
+          <div class="toolbar">
+            <span class="spacer"></span>
+            <button class="btn-primary" id="newStaffBtn">+ Add Staff</button>
+          </div>
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Org</th><th>Office</th><th>Roles</th><th></th></tr></thead>
+            <tbody id="staffBody"></tbody>
+          </table>
+
+          <h2 style="margin:24px 0 12px;font-size:16px">Invite Codes</h2>
+          <div class="toolbar">
+            <span class="spacer"></span>
+            <button class="btn-primary" id="newInviteBtn">+ Create Invite</button>
+          </div>
+          <table>
+            <thead><tr><th>Code</th><th>Office</th><th>Roles granted</th><th>Uses</th><th>Status</th><th></th></tr></thead>
+            <tbody id="inviteBody"></tbody>
+          </table>
+        </div>
+
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- Create invite -->
+<div class="overlay" id="inviteOverlay">
+  <div class="sheet">
+    <h2>Create Invite Code</h2>
+    <div class="grid2">
+      <div><label>Office</label><select id="inv_office"></select></div>
+      <div><label>Custom code (optional)</label><input id="inv_code" placeholder="leave blank to auto-generate"></div>
+      <div><label>Max uses (optional)</label><input id="inv_maxUses" type="number" min="1" placeholder="unlimited"></div>
+      <div><label>Expires (optional)</label><input id="inv_expires" type="date"></div>
+      <div class="full checkline"><input type="checkbox" id="inv_master"><label style="margin:0">Grants office master</label></div>
+      <div class="full checkline"><input type="checkbox" id="inv_orgAdmin"><label style="margin:0">Grants org admin</label></div>
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelInvite">Cancel</button>
+      <button class="btn-primary" id="saveInvite">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Job -->
+<div class="overlay" id="newJobOverlay">
+  <div class="sheet">
+    <h2>New Job</h2>
+    <div class="grid2">
+      <div class="full"><label>Job Name *</label><input id="f_jobName" placeholder="e.g. PHENIX JWY - JOHN SMITH"></div>
+      <div><label>Contact Person</label><input id="f_contact"></div>
+      <div><label>Client Phone</label><input id="f_phone"></div>
+      <div><label>Priority</label><select id="f_priority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+      <div><label>Delivery Date</label><input id="f_deliveryDate" type="date"></div>
+      <div><label>PO Number</label><input id="f_po"></div>
+      <div class="full checkline"><input type="checkbox" id="f_semiMount"><label style="margin:0">Client's own stone / semi-mount</label></div>
+      <div class="full"><label>Notes</label><textarea id="f_notes" rows="3"></textarea></div>
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelNewJob">Cancel</button>
+      <button class="btn-primary" id="saveNewJob">Create Job</button>
+    </div>
+  </div>
+</div>
+
+<!-- Job Detail -->
+<div class="overlay" id="jobDetailOverlay">
+  <div class="sheet wide">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <h2 id="detailTitle">Job</h2>
+      <button class="btn-ghost btn-sm" id="whatsappShareBtn">📱 Share via WhatsApp</button>
+    </div>
+    <div class="grid2">
+      <div><label>Contact Person</label><input id="d_contact"></div>
+      <div><label>Client Phone</label><input id="d_phone"></div>
+      <div><label>Priority</label><select id="d_priority"><option>Low</option><option>Medium</option><option>High</option></select></div>
+      <div><label>Delivery Date</label><input id="d_deliveryDate" type="date"></div>
+      <div><label>PO Number</label><input id="d_po"></div>
+      <div class="checkline" style="margin-top:22px"><input type="checkbox" id="d_semiMount"><label style="margin:0">Client's own stone / semi-mount</label></div>
+      <div class="full"><label>Notes</label><textarea id="d_notes" rows="2"></textarea></div>
+    </div>
+    <div class="actions" style="margin-top:10px"><button class="btn-primary btn-sm" id="saveJobEdit">Save changes</button></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="issues">Issues</button>
+      <button class="tab-btn" data-tab="chat">Chat</button>
+      <button class="tab-btn" data-tab="images">Images</button>
+      <button class="tab-btn" data-tab="design">Design Entries</button>
+      <button class="tab-btn" data-tab="items">Client Items</button>
+    </div>
+
+    <div class="tabpane active" id="tab-history"><div id="historyList"></div></div>
+
+    <div class="tabpane" id="tab-issues">
+      <div id="issuesList"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Issue type</label><input id="i_type" placeholder="e.g. Repair, Sizing"></div>
+        <div class="full"><label>Description</label><textarea id="i_desc" rows="2"></textarea></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="addIssueBtn">Report issue</button></div>
+    </div>
+
+    <div class="tabpane" id="tab-chat">
+      <div class="chat-thread" id="chatThread"></div>
+      <div class="chat-send">
+        <textarea id="chatInput" rows="2" placeholder="Message…"></textarea>
+        <button class="btn-primary" id="chatSendBtn">Send</button>
+      </div>
+    </div>
+
+    <div class="tabpane" id="tab-images">
+      <div class="img-grid" id="imgGrid"></div>
+      <input type="file" id="imgFileInput" accept="image/*" style="display:none">
+      <button class="btn-ghost btn-sm" id="addImageBtn">+ Add image</button>
+    </div>
+
+    <div class="tabpane" id="tab-design">
+      <div id="designEntriesList"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Kind</label>
+          <select id="de_kind">
+            <option value="custom">Custom</option>
+            <option value="matching_set">Matching set piece</option>
+            <option value="stock">Stock (no number)</option>
+          </select>
+        </div>
+        <div id="de_numberField"><label>Design number</label>
+          <div style="display:flex;gap:6px">
+            <input id="de_baseNumber" placeholder="claim one or enter">
+            <button class="btn-ghost btn-sm" id="de_claimBtn" type="button">Claim next</button>
+          </div>
+        </div>
+        <div id="de_suffixField" style="display:none"><label>Suffix (e.g. E, W)</label><input id="de_suffix"></div>
+        <div class="full"><label>Description</label><textarea id="de_desc" rows="2"></textarea></div>
+        <div><label>PO Number</label><input id="de_po"></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="addDesignEntryBtn">Add entry</button></div>
+    </div>
+
+    <div class="tabpane" id="tab-items">
+      <div id="clientItemsList"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div class="full"><label>Description</label><textarea id="ci_desc" rows="2" placeholder="e.g. Client's own diamond, 1.2ct round"></textarea></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="addClientItemBtn">Add item</button></div>
+    </div>
+
+    <div class="actions"><button class="btn-ghost" id="closeDetail">Close</button></div>
+  </div>
+</div>
+
+<!-- Add / edit staff -->
+<div class="overlay" id="staffOverlay">
+  <div class="sheet">
+    <h2>Add Staff</h2>
+    <div class="grid2">
+      <div class="full"><label>Full name</label><input id="s_name"></div>
+      <div class="full"><label>Email</label><input id="s_email" type="email"></div>
+      <div class="full"><label>Temporary password</label><input id="s_password" type="text" placeholder="they can be given this to sign in with"></div>
+      <div><label>Office</label><select id="s_office"></select></div>
+      <div><label>Roles</label>
+        <div class="checkline" id="s_admin_row"><input type="checkbox" id="s_admin"><label style="margin:0">Global admin (both orgs)</label></div>
+        <div class="checkline"><input type="checkbox" id="s_orgAdmin"><label style="margin:0">Org admin</label></div>
+        <div class="checkline"><input type="checkbox" id="s_master"><label style="margin:0">Office master</label></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelStaff">Cancel</button>
+      <button class="btn-primary" id="saveStaff">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BASE = window.WORLDSHINER_API_BASE || 'http://localhost:4000/api';
+let TOKEN = localStorage.getItem('ws2_token') || null;
+let USER = JSON.parse(localStorage.getItem('ws2_user') || 'null');
+let STATUSES = [];
+let JOBS = [];
+let OFFICES = [];
+let CURRENT_JOB_ID = null;
+let UNREAD = {};
+
+const $ = (id) => document.getElementById(id);
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = 'none'), 3500);
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+async function api(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}), ...(options.headers || {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(body.error || `Request failed (${res.status})`); err.status = res.status; throw err; }
+  return body;
+}
+
+// ---- Auth ----
+$('loginBtn').onclick = async () => {
+  $('loginErr').textContent = '';
+  const email = $('loginEmail').value.trim(), password = $('loginPassword').value;
+  if (!email || !password) { $('loginErr').textContent = 'Enter email and password.'; return; }
+  try {
+    const { token, user } = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    TOKEN = token; USER = user;
+    localStorage.setItem('ws2_token', token); localStorage.setItem('ws2_user', JSON.stringify(user));
+    showApp();
+  } catch (e) { $('loginErr').textContent = e.message; }
+};
+$('signOutBtn').onclick = () => {
+  TOKEN = null; USER = null;
+  localStorage.removeItem('ws2_token'); localStorage.removeItem('ws2_user');
+  $('app').style.display = 'none'; $('loginScreen').style.display = 'flex';
+};
+
+async function showApp() {
+  $('loginScreen').style.display = 'none'; $('app').style.display = 'block';
+  $('whoAmI').textContent = `${USER.displayName} · ${USER.officeName}${USER.orgName ? ' · ' + USER.orgName : ''}`;
+  const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq;
+  const isAdmin = USER.isGlobalAdmin || USER.isOrgAdmin;
+  const isHqOrAdmin = isAdmin || USER.officeIsHq;
+  $('officeSwitcher').style.display = canSwitch ? 'inline-block' : 'none';
+  document.querySelector('[data-view="staff"]').style.display = isAdmin ? 'flex' : 'none';
+  document.querySelector('[data-view="import"]').style.display = isAdmin ? 'flex' : 'none';
+  document.querySelector('[data-view="reports"]').style.display = isHqOrAdmin ? 'flex' : 'none';
+  document.querySelector('[data-view="mail"]').style.display = isHqOrAdmin ? 'flex' : 'none';
+  document.querySelector('[data-view="sla"]').style.display = 'flex';
+  if (canSwitch) await loadOffices();
+  await loadStatuses();
+  await loadJobs();
+}
+
+// ---- Nav ----
+const VIEWS = {
+  jobs: { onEnter: () => {} },
+  sla: { onEnter: () => loadSlaAlerts() },
+  reports: { onEnter: () => initReportsView() },
+  staff: { onEnter: () => { loadStaff(); loadInvites(); } },
+  import: { onEnter: () => initImportView() },
+  mail: { onEnter: () => loadMailStatus() },
+};
+async function loadSlaAlerts() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams();
+  if (office) params.set('office', office);
+  const { breaches } = await api(`/sla/breaches?${params.toString()}`);
+  $('slaEmptyState').style.display = breaches.length ? 'none' : 'block';
+  $('slaBody').innerHTML = breaches.map(b => `
+    <tr>
+      <td>${escapeHtml(b.jobName)}</td>
+      <td>${escapeHtml(b.officeName)}</td>
+      <td><span class="badge ${b.priority}">${b.priority}</span></td>
+      <td>${escapeHtml(b.statusCode)}</td>
+      <td>${escapeHtml(b.slaLabel)}</td>
+      <td>${b.hoursInStatus}h</td>
+      <td>${b.thresholdHours}h</td>
+      <td><span class="badge ${b.overageHours > b.thresholdHours ? 'sla-severe' : 'sla-mild'}">+${b.overageHours}h</span></td>
+    </tr>`).join('');
+}
+function initReportsView() {
+  if (!$('rep_month').value) {
+    const now = new Date();
+    $('rep_month').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  $('rep_office').innerHTML = `<option value="">All offices</option>` + OFFICES.map(o => `<option value="${o.code}">${o.name}</option>`).join('');
+  generateReport();
+}
+async function generateReport() {
+  const [year, month] = $('rep_month').value.split('-').map(Number);
+  if (!year || !month) return;
+  const params = new URLSearchParams({ year, month });
+  if ($('rep_office').value) params.set('office', $('rep_office').value);
+  try {
+    const { offices } = await api(`/reports/monthly-summary?${params.toString()}`);
+    $('reportCards').innerHTML = offices.map(o => `
+      <div class="sheet" style="max-width:none;margin-bottom:14px;padding:16px">
+        <h2 style="font-size:15px;margin-bottom:8px">${escapeHtml(o.officeName)}</h2>
+        <div>Created: <b>${o.createdCount}</b> &nbsp; Completed: <b>${o.completedCount}</b> &nbsp; Not proceeding: <b>${o.notProceedingCount}</b></div>
+        ${o.statusBreakdown.length ? `<div class="meta" style="margin-top:8px">${o.statusBreakdown.map(s => `${escapeHtml(s.label)}: ${s.count}`).join(' · ')}</div>` : ''}
+      </div>`).join('') || '<p class="meta">No activity for this period.</p>';
+  } catch (e) { toast(e.message); }
+}
+$('rep_generateBtn').onclick = generateReport;
+$('rep_downloadBtn').onclick = async () => {
+  const [year, month] = $('rep_month').value.split('-').map(Number);
+  if (!year || !month) { toast('Pick a month first.'); return; }
+  const params = new URLSearchParams({ year, month });
+  if ($('rep_office').value) params.set('office', $('rep_office').value);
+  try {
+    // Bypasses the shared api() wrapper: this endpoint returns a PDF binary,
+    // not JSON, but still needs the Authorization header a plain <a href> can't send.
+    const res = await fetch(`${API_BASE}/reports/monthly-summary/pdf?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `Request failed (${res.status})`); }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `worldshiner-report-${year}-${String(month).padStart(2, '0')}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { toast(e.message); }
+};
+const IMPORT_FIELDS = ['jobName', 'contactPerson', 'clientPhone', 'priority', 'poNumber', 'clientDeliveryDate', 'notes', 'designNo'];
+let IMP_FILE_DATA_URL = null, IMP_FILENAME = null, IMP_HEADERS = [];
+function importReset() {
+  $('imp_step1').style.display = 'block'; $('imp_step2').style.display = 'none'; $('imp_step3').style.display = 'none';
+  $('imp_fileInput').value = ''; IMP_FILE_DATA_URL = null;
+}
+function initImportView() {
+  $('imp_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}</option>`).join('');
+  importReset();
+}
+$('imp_previewBtn').onclick = () => {
+  const file = $('imp_fileInput').files[0];
+  if (!file) { toast('Choose a file first.'); return; }
+  IMP_FILENAME = file.name;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    IMP_FILE_DATA_URL = reader.result;
+    try {
+      const preview = await api('/import/preview', { method: 'POST', body: JSON.stringify({ fileDataUrl: IMP_FILE_DATA_URL, filename: IMP_FILENAME }) });
+      IMP_HEADERS = preview.headers;
+      $('imp_mappingHeader').innerHTML = IMP_HEADERS.map(h => `<th>${escapeHtml(h)}</th>`).join('');
+      $('imp_mappingBody').innerHTML = '<tr>' + IMP_HEADERS.map((h, i) => `<td><select data-col="${i}">
+        <option value="">(ignore)</option>
+        ${IMPORT_FIELDS.map(f => `<option value="${f}" ${preview.suggestedMapping[i] === f ? 'selected' : ''}>${f}</option>`).join('')}
+      </select></td>`).join('') + '</tr>';
+      $('imp_sampleHeader').innerHTML = IMP_HEADERS.map(h => `<th>${escapeHtml(h)}</th>`).join('');
+      $('imp_sampleBody').innerHTML = preview.sampleRows.map(row => `<tr>${row.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('') +
+        `<tr><td colspan="${IMP_HEADERS.length}" class="meta">${preview.totalRows} total data row(s)</td></tr>`;
+      $('imp_step1').style.display = 'none'; $('imp_step2').style.display = 'block';
+    } catch (e) { toast(e.message); }
+  };
+  reader.readAsDataURL(file);
+};
+$('imp_cancelBtn').onclick = importReset;
+$('imp_commitBtn').onclick = async () => {
+  const mapping = {};
+  $('imp_mappingBody').querySelectorAll('select[data-col]').forEach(sel => { if (sel.value) mapping[sel.dataset.col] = sel.value; });
+  try {
+    const result = await api('/import/commit', { method: 'POST', body: JSON.stringify({
+      fileDataUrl: IMP_FILE_DATA_URL, filename: IMP_FILENAME, mapping, officeCode: $('imp_office').value,
+    })});
+    $('imp_summary').innerHTML = `
+      <div>Total rows: <b>${result.totalRows}</b></div>
+      <div>Imported: <b>${result.imported}</b> &nbsp; Skipped (duplicate PO): <b>${result.skippedDuplicate}</b> &nbsp; Errored: <b>${result.errored}</b></div>
+      ${result.errors.length ? `<h2 style="font-size:13px;margin-top:12px">Errors</h2><div class="meta">${result.errors.map(e => `Row ${e.row}: ${escapeHtml(e.error)}`).join('<br>')}</div>` : ''}
+    `;
+    $('imp_step2').style.display = 'none'; $('imp_step3').style.display = 'block';
+  } catch (e) { toast(e.message); }
+};
+$('imp_doneBtn').onclick = importReset;
+async function loadMailStatus() {
+  try {
+    const status = await api('/gmail/status');
+    if (!status.configured) {
+      $('mail_status').innerHTML = `<b>Not configured.</b> This office admin needs to add Google Cloud OAuth credentials (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI) to the server's .env before Gmail features work.`;
+      $('mail_actions').style.display = 'none';
+    } else if (!status.connected) {
+      $('mail_status').innerHTML = `<b>Not connected.</b> <button class="btn-primary btn-sm" id="mail_connectBtn" style="margin-left:8px">Connect Gmail</button>`;
+      $('mail_actions').style.display = 'none';
+      $('mail_connectBtn').onclick = async () => {
+        try { const { authUrl } = await api('/gmail/connect'); window.location.href = authUrl; }
+        catch (e) { toast(e.message); }
+      };
+    } else {
+      $('mail_status').innerHTML = `<b>Connected</b> as ${escapeHtml(status.googleEmail || 'unknown')}. <button class="btn-ghost btn-sm" id="mail_disconnectBtn" style="margin-left:8px">Disconnect</button>`;
+      $('mail_actions').style.display = 'block';
+      $('mail_disconnectBtn').onclick = async () => {
+        try { await api('/gmail/disconnect', { method: 'DELETE' }); await loadMailStatus(); }
+        catch (e) { toast(e.message); }
+      };
+    }
+  } catch (e) { $('mail_status').textContent = e.message; }
+}
+$('mail_sendBtn').onclick = async () => {
+  try {
+    await api('/gmail/send-cad', { method: 'POST', body: JSON.stringify({ to: $('mail_to').value.trim(), subject: $('mail_subject').value.trim(), body: $('mail_body').value.trim() }) });
+    toast('Email sent.'); ['mail_to','mail_subject','mail_body'].forEach(id => $(id).value = '');
+  } catch (e) { toast(e.message); }
+};
+function switchView(view) {
+  document.querySelectorAll('.navlist [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('main > [id$="View"]').forEach(el => el.style.display = el.id === view + 'View' ? 'block' : 'none');
+  $('sidebar').classList.remove('mobile-open');
+  VIEWS[view]?.onEnter?.();
+}
+document.querySelectorAll('.navlist [data-view]').forEach(btn => btn.onclick = () => switchView(btn.dataset.view));
+$('sidebarToggle').onclick = () => {
+  $('sidebar').classList.toggle('collapsed');
+  localStorage.setItem('ws2_sidebar_collapsed', $('sidebar').classList.contains('collapsed') ? '1' : '0');
+};
+if (localStorage.getItem('ws2_sidebar_collapsed') === '1') $('sidebar').classList.add('collapsed');
+$('mobileNavToggle').onclick = () => $('sidebar').classList.toggle('mobile-open');
+
+// ---- Offices / Statuses ----
+async function loadOffices() {
+  const { offices } = await api('/offices');
+  OFFICES = offices;
+  const sel = $('officeSwitcher');
+  sel.innerHTML = `<option value="">All offices</option>` + offices.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' — ' + o.org_code : ''}</option>`).join('');
+  sel.onchange = loadJobs;
+}
+async function loadStatuses() {
+  const { statuses } = await api('/offices/statuses');
+  STATUSES = statuses;
+  $('statusFilter').innerHTML = `<option value="">All statuses</option>` +
+    statuses.filter(s => !s.is_system_only).map(s => `<option value="${s.code}">${s.label}</option>`).join('');
+}
+function statusOptionsHtml(currentCode) {
+  return STATUSES.filter(s => !s.is_system_only || s.code === currentCode)
+    .map(s => `<option value="${s.code}" ${s.code === currentCode ? 'selected' : ''}>${s.label}</option>`).join('');
+}
+
+// ---- Jobs list ----
+async function loadJobs() {
+  const params = new URLSearchParams();
+  const office = $('officeSwitcher').value, status = $('statusFilter').value, search = $('searchInput').value.trim();
+  if (office) params.set('office', office);
+  if (status) params.set('status', status);
+  if (search) params.set('search', search);
+  const { jobs } = await api(`/jobs?${params.toString()}`);
+  JOBS = jobs;
+  try {
+    const { unread } = await api('/chat/unread-counts');
+    UNREAD = {}; unread.forEach(u => UNREAD[u.job_id] = u.unread);
+  } catch (e) { UNREAD = {}; }
+  renderJobs();
+}
+function renderJobs() {
+  const body = $('jobsBody');
+  $('emptyState').style.display = JOBS.length ? 'none' : 'block';
+  body.innerHTML = JOBS.map(j => `
+    <tr class="job-row" data-id="${j.id}">
+      <td>${escapeHtml(j.job_name)}${j.office_code ? ` <span style="color:var(--text2);font-size:11px">(${j.office_code})</span>` : ''}${UNREAD[j.id] ? '<span class="unread-dot" title="'+UNREAD[j.id]+' unread"></span>' : ''}</td>
+      <td>${escapeHtml(j.contact_person || '—')}</td>
+      <td><span class="badge ${j.priority}">${j.priority}</span></td>
+      <td><select class="status-inline" data-id="${j.id}" onclick="event.stopPropagation()">${statusOptionsHtml(j.status_code)}</select></td>
+      <td>${escapeHtml(j.po_number || '—')}</td>
+      <td>${j.client_delivery_date ? new Date(j.client_delivery_date).toLocaleDateString() : '—'}</td>
+      <td><button class="btn-ghost btn-sm" onclick="event.stopPropagation()" data-open="${j.id}">Open</button></td>
+    </tr>`).join('');
+  body.querySelectorAll('tr.job-row').forEach(tr => tr.onclick = () => openJobDetail(tr.dataset.id));
+  body.querySelectorAll('button[data-open]').forEach(b => b.onclick = () => openJobDetail(b.dataset.open));
+  body.querySelectorAll('select.status-inline').forEach(sel => sel.onchange = () => changeStatus(sel.dataset.id, sel.value, sel));
+}
+$('searchInput').addEventListener('input', debounce(loadJobs, 350));
+$('statusFilter').onchange = loadJobs;
+
+async function changeStatus(jobId, statusCode, selEl) {
+  try {
+    await api(`/jobs/${jobId}/status`, { method: 'PATCH', body: JSON.stringify({ statusCode }) });
+    toast('Status updated.'); await loadJobs();
+  } catch (e) {
+    if (e.status === 409) {
+      const charge = prompt(e.message + '\n\nEnter the setting charge (e.g. 400), or type None:');
+      if (charge === null) { await loadJobs(); return; }
+      try { await api(`/jobs/${jobId}/status`, { method: 'PATCH', body: JSON.stringify({ statusCode, settingCharge: charge }) }); toast('Status updated.'); }
+      catch (e2) { toast(e2.message); }
+      await loadJobs();
+    } else { toast(e.message); await loadJobs(); }
+  }
+}
+
+// ---- New job ----
+$('newJobBtn').onclick = () => $('newJobOverlay').classList.add('open');
+$('cancelNewJob').onclick = () => $('newJobOverlay').classList.remove('open');
+$('saveNewJob').onclick = async () => {
+  const jobName = $('f_jobName').value.trim();
+  if (!jobName) { toast('Job name is required.'); return; }
+  try {
+    await api('/jobs', { method: 'POST', body: JSON.stringify({
+      jobName, contactPerson: $('f_contact').value.trim(), clientPhone: $('f_phone').value.trim(),
+      priority: $('f_priority').value, clientDeliveryDate: $('f_deliveryDate').value || null,
+      poNumber: $('f_po').value.trim(), clientStoneSemiMount: $('f_semiMount').checked, notes: $('f_notes').value.trim(),
+    })});
+    $('newJobOverlay').classList.remove('open');
+    ['f_jobName','f_contact','f_phone','f_po','f_notes','f_deliveryDate'].forEach(id => $(id).value = '');
+    $('f_semiMount').checked = false;
+    toast('Job created.'); await loadJobs();
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Job detail: edit fields + tabs ----
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tabpane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.add('active');
+  };
+});
+
+async function openJobDetail(jobId) {
+  CURRENT_JOB_ID = jobId;
+  const job = JOBS.find(j => String(j.id) === String(jobId));
+  $('detailTitle').textContent = job ? job.job_name : 'Job';
+  $('d_contact').value = job?.contact_person || '';
+  $('d_phone').value = job?.client_phone || '';
+  $('d_priority').value = job?.priority || 'Medium';
+  $('d_deliveryDate').value = job?.client_delivery_date ? job.client_delivery_date.slice(0,10) : '';
+  $('d_po').value = job?.po_number || '';
+  $('d_semiMount').checked = !!job?.client_stone_semi_mount;
+  $('d_notes').value = job?.notes || '';
+  $('jobDetailOverlay').classList.add('open');
+  await Promise.all([loadHistory(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId)]);
+  api(`/jobs/${jobId}/chat/read`, { method: 'POST' }).catch(() => {});
+}
+$('closeDetail').onclick = () => { $('jobDetailOverlay').classList.remove('open'); loadJobs(); };
+
+// ---- WhatsApp share ----
+$('whatsappShareBtn').onclick = () => {
+  const job = JOBS.find(j => String(j.id) === String(CURRENT_JOB_ID));
+  if (!job) return;
+  const phone = (job.client_phone || '').replace(/[^\d]/g, '');
+  if (!phone) { toast('No client phone number on this job.'); return; }
+  const statusLabel = STATUSES.find(s => s.code === job.status_code)?.label || job.status_code;
+  const msg = `Hi ${job.contact_person || ''}, quick update on your order "${job.job_name}" (PO ${job.po_number || 'N/A'}): current status is "${statusLabel}", priority ${job.priority}. Let us know if you have any questions!`;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+};
+
+$('saveJobEdit').onclick = async () => {
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}`, { method: 'PATCH', body: JSON.stringify({
+      contactPerson: $('d_contact').value.trim(), clientPhone: $('d_phone').value.trim(),
+      priority: $('d_priority').value, clientDeliveryDate: $('d_deliveryDate').value || null,
+      poNumber: $('d_po').value.trim(), clientStoneSemiMount: $('d_semiMount').checked, notes: $('d_notes').value.trim(),
+    })});
+    toast('Job updated.'); await loadJobs();
+  } catch (e) { toast(e.message); }
+};
+
+async function loadHistory(jobId) {
+  const { history } = await api(`/jobs/${jobId}/history`);
+  $('historyList').innerHTML = history.map(h => `
+    <div class="history-item">
+      <div>${escapeHtml(h.status_code)} <span style="color:var(--text2)">(${h.side})</span></div>
+      <div class="meta">${new Date(h.changed_at).toLocaleString()}${h.changed_by_name ? ' · ' + escapeHtml(h.changed_by_name) : ''}${h.note ? ' · ' + escapeHtml(h.note) : ''}</div>
+    </div>`).join('') || '<p class="meta">No history yet.</p>';
+}
+
+// ---- Issues tab ----
+async function loadIssues(jobId) {
+  const { issues } = await api(`/jobs/${jobId}/issues`);
+  $('issuesList').innerHTML = issues.map(i => `
+    <div class="issue-item" data-id="${i.id}">
+      <div class="top">
+        <div><b>${escapeHtml(i.issue_type)}</b> <span class="badge ${i.status}">${i.status}</span></div>
+        <button class="btn-ghost btn-sm" data-toggle="${i.id}" data-status="${i.status}">${i.status === 'open' ? 'Resolve' : 'Reopen'}</button>
+      </div>
+      ${i.description ? `<div>${escapeHtml(i.description)}</div>` : ''}
+      <div class="meta">Opened ${new Date(i.opened_at).toLocaleString()}${i.opened_by_name ? ' by ' + escapeHtml(i.opened_by_name) : ''}${i.resolved_at ? ' · Resolved ' + new Date(i.resolved_at).toLocaleString() : ''}</div>
+    </div>`).join('') || '<p class="meta">No issues logged.</p>';
+  $('issuesList').querySelectorAll('button[data-toggle]').forEach(btn => {
+    btn.onclick = async () => {
+      const action = btn.dataset.status === 'open' ? 'resolve' : 'reopen';
+      try { await api(`/issues/${btn.dataset.toggle}`, { method: 'PATCH', body: JSON.stringify({ action }) }); await loadIssues(jobId); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('addIssueBtn').onclick = async () => {
+  const issueType = $('i_type').value.trim();
+  if (!issueType) { toast('Issue type is required.'); return; }
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/issues`, { method: 'POST', body: JSON.stringify({ issueType, description: $('i_desc').value.trim() }) });
+    $('i_type').value = ''; $('i_desc').value = '';
+    toast('Issue logged.'); await loadIssues(CURRENT_JOB_ID);
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Chat tab ----
+async function loadChat(jobId) {
+  const { messages } = await api(`/jobs/${jobId}/chat`);
+  $('chatThread').innerHTML = messages.map(m => `
+    <div class="chat-msg">
+      <div class="meta">${escapeHtml(m.sender_name || 'Someone')} · ${new Date(m.created_at).toLocaleString()}</div>
+      <div>${escapeHtml(m.body || '')}</div>
+      ${m.image_url ? `<img src="${m.image_url}" style="max-width:160px;border-radius:6px;margin-top:4px">` : ''}
+    </div>`).join('') || '<p class="meta">No messages yet.</p>';
+  $('chatThread').scrollTop = $('chatThread').scrollHeight;
+}
+$('chatSendBtn').onclick = async () => {
+  const body = $('chatInput').value.trim();
+  if (!body) return;
+  try { await api(`/jobs/${CURRENT_JOB_ID}/chat`, { method: 'POST', body: JSON.stringify({ body }) }); $('chatInput').value = ''; await loadChat(CURRENT_JOB_ID); }
+  catch (e) { toast(e.message); }
+};
+
+// ---- Images tab ----
+async function loadImages(jobId) {
+  const { images } = await api(`/jobs/${jobId}/images`);
+  $('imgGrid').innerHTML = images.map(img => `
+    <div class="thumb"><img src="${img.url}" alt=""><button class="del" data-del="${img.id}">×</button></div>`).join('');
+  $('imgGrid').querySelectorAll('button[data-del]').forEach(b => {
+    b.onclick = async () => { await api(`/jobs/${CURRENT_JOB_ID}/images/${b.dataset.del}`, { method: 'DELETE' }); await loadImages(CURRENT_JOB_ID); };
+  });
+}
+// ---- Design entries tab ----
+async function loadDesignEntries(jobId) {
+  const { entries } = await api(`/jobs/${jobId}/design-entries`);
+  $('designEntriesList').innerHTML = entries.map(e => `
+    <div class="history-item" data-id="${e.id}">
+      <div><b>${escapeHtml(e.base_number || '(stock — no number)')}</b> <span class="meta">${e.kind}</span>
+        <button class="btn-ghost btn-sm" data-del-entry="${e.id}" style="float:right">Delete</button></div>
+      ${e.description ? `<div>${escapeHtml(e.description)}</div>` : ''}
+      ${e.po_number ? `<div class="meta">PO ${escapeHtml(e.po_number)}</div>` : ''}
+    </div>`).join('') || '<p class="meta">No design entries yet.</p>';
+  $('designEntriesList').querySelectorAll('button[data-del-entry]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/jobs/${jobId}/design-entries/${b.dataset.delEntry}`, { method: 'DELETE' }); await loadDesignEntries(jobId); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('de_kind').onchange = () => {
+  const kind = $('de_kind').value;
+  $('de_numberField').style.display = kind === 'stock' ? 'none' : 'block';
+  $('de_suffixField').style.display = kind === 'matching_set' ? 'block' : 'none';
+};
+$('de_claimBtn').onclick = async () => {
+  try { const { baseNumber } = await api(`/jobs/${CURRENT_JOB_ID}/design-entries/claim-number`, { method: 'POST' }); $('de_baseNumber').value = baseNumber; }
+  catch (e) { toast(e.message); }
+};
+$('addDesignEntryBtn').onclick = async () => {
+  const kind = $('de_kind').value;
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/design-entries`, { method: 'POST', body: JSON.stringify({
+      kind, baseNumber: kind === 'stock' ? undefined : ($('de_baseNumber').value.trim() || undefined),
+      suffix: kind === 'matching_set' ? $('de_suffix').value.trim() : undefined,
+      description: $('de_desc').value.trim(), poNumber: $('de_po').value.trim(),
+    })});
+    $('de_baseNumber').value = ''; $('de_suffix').value = ''; $('de_desc').value = ''; $('de_po').value = '';
+    toast('Design entry added.'); await loadDesignEntries(CURRENT_JOB_ID);
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Client items tab ----
+async function loadClientItems(jobId) {
+  const { items } = await api(`/jobs/${jobId}/client-items`);
+  $('clientItemsList').innerHTML = items.map(i => `
+    <div class="history-item" data-id="${i.id}">
+      <div>${escapeHtml(i.description || '')} <button class="btn-ghost btn-sm" data-del-item="${i.id}" style="float:right">Delete</button></div>
+    </div>`).join('') || '<p class="meta">No client items yet.</p>';
+  $('clientItemsList').querySelectorAll('button[data-del-item]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/jobs/${jobId}/client-items/${b.dataset.delItem}`, { method: 'DELETE' }); await loadClientItems(jobId); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('addClientItemBtn').onclick = async () => {
+  const description = $('ci_desc').value.trim();
+  if (!description) { toast('Description is required.'); return; }
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/client-items`, { method: 'POST', body: JSON.stringify({ description }) });
+    $('ci_desc').value = '';
+    toast('Client item added.'); await loadClientItems(CURRENT_JOB_ID);
+  } catch (e) { toast(e.message); }
+};
+
+$('addImageBtn').onclick = () => $('imgFileInput').click();
+$('imgFileInput').onchange = async () => {
+  const file = $('imgFileInput').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const { url } = await api('/uploads', { method: 'POST', body: JSON.stringify({ dataUrl: reader.result }) });
+      await api(`/jobs/${CURRENT_JOB_ID}/images`, { method: 'POST', body: JSON.stringify({ kind: 'client_ref', url }) });
+      await loadImages(CURRENT_JOB_ID);
+      toast('Image added.');
+    } catch (e) { toast(e.message); }
+    $('imgFileInput').value = '';
+  };
+  reader.readAsDataURL(file);
+};
+
+// ---- Staff view ----
+async function loadStaff() {
+  const { users } = await api('/users');
+  $('staffBody').innerHTML = users.map(u => {
+    const roles = [u.is_global_admin && 'Global admin', u.is_org_admin && 'Org admin', u.is_office_master && 'Master', u.restrict_to_own_jobs && 'Own jobs only'].filter(Boolean).join(', ') || 'Staff';
+    return `<tr><td>${escapeHtml(u.display_name)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.org_code || '—')}</td><td>${escapeHtml(u.office_name)}</td><td>${roles}</td>
+      <td><button class="btn-ghost btn-sm" data-deactivate="${u.id}" data-active="${u.active}">${u.active ? 'Deactivate' : 'Reactivate'}</button></td></tr>`;
+  }).join('');
+  $('staffBody').querySelectorAll('button[data-deactivate]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/users/${b.dataset.deactivate}`, { method: 'PATCH', body: JSON.stringify({ active: b.dataset.active !== 'true' }) }); await loadStaff(); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('newStaffBtn').onclick = () => {
+  $('s_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
+  $('s_admin_row').style.display = USER.isGlobalAdmin ? 'flex' : 'none'; // only a global admin can grant global admin
+  $('staffOverlay').classList.add('open');
+};
+$('cancelStaff').onclick = () => $('staffOverlay').classList.remove('open');
+$('saveStaff').onclick = async () => {
+  try {
+    await api('/users', { method: 'POST', body: JSON.stringify({
+      displayName: $('s_name').value.trim(), email: $('s_email').value.trim(), password: $('s_password').value,
+      officeCode: $('s_office').value, isGlobalAdmin: $('s_admin').checked, isOrgAdmin: $('s_orgAdmin').checked, isOfficeMaster: $('s_master').checked,
+    })});
+    $('staffOverlay').classList.remove('open');
+    ['s_name','s_email','s_password'].forEach(id => $(id).value = '');
+    $('s_admin').checked = false; $('s_orgAdmin').checked = false; $('s_master').checked = false;
+    toast('Staff added.'); await loadStaff();
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Invite codes ----
+async function loadInvites() {
+  try {
+    const { invites } = await api('/invite-codes');
+    $('inviteBody').innerHTML = invites.map(i => {
+      const roles = [i.is_global_admin && 'Global admin', i.is_org_admin && 'Org admin', i.is_office_master && 'Master'].filter(Boolean).join(', ') || 'Staff';
+      const uses = i.max_uses ? `${i.use_count}/${i.max_uses}` : `${i.use_count}/∞`;
+      return `<tr><td><code>${escapeHtml(i.code)}</code></td><td>${escapeHtml(i.office_name)}</td><td>${roles}</td><td>${uses}</td>
+        <td>${i.active ? 'Active' : 'Revoked'}</td>
+        <td>${i.active ? `<button class="btn-ghost btn-sm" data-revoke="${i.id}">Revoke</button>` : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="meta">No invite codes yet.</td></tr>';
+    $('inviteBody').querySelectorAll('button[data-revoke]').forEach(b => {
+      b.onclick = async () => {
+        try { await api(`/invite-codes/${b.dataset.revoke}/revoke`, { method: 'PATCH' }); await loadInvites(); }
+        catch (e) { toast(e.message); }
+      };
+    });
+  } catch (e) {
+    $('inviteBody').innerHTML = `<tr><td colspan="6" class="meta">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+$('newInviteBtn').onclick = () => {
+  $('inv_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
+  $('inviteOverlay').classList.add('open');
+};
+$('cancelInvite').onclick = () => $('inviteOverlay').classList.remove('open');
+$('saveInvite').onclick = async () => {
+  try {
+    await api('/invite-codes', { method: 'POST', body: JSON.stringify({
+      officeCode: $('inv_office').value, code: $('inv_code').value.trim() || undefined,
+      maxUses: $('inv_maxUses').value ? Number($('inv_maxUses').value) : undefined,
+      expiresAt: $('inv_expires').value ? new Date($('inv_expires').value).toISOString() : undefined,
+      isOfficeMaster: $('inv_master').checked, isOrgAdmin: $('inv_orgAdmin').checked,
+    })});
+    $('inviteOverlay').classList.remove('open');
+    ['inv_code','inv_maxUses','inv_expires'].forEach(id => $(id).value = '');
+    $('inv_master').checked = false; $('inv_orgAdmin').checked = false;
+    toast('Invite created.'); await loadInvites();
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Boot ----
+if (TOKEN && USER) showApp().catch(() => { TOKEN = null; USER = null; });
+</script>
+</body>
+</html>

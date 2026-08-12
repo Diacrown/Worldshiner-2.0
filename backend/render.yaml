@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: worldshiner2-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run migrate && npm start
+    # Run `npm run seed` ONCE yourself (Render dashboard -> Shell tab, or run
+    # it locally against the same DATABASE_URL) after first deploy — it's not
+    # in startCommand on purpose. Re-seeding resets the demo accounts'
+    # passwords back to demo1234 every time, which you do NOT want happening
+    # automatically after you've started using this for real.
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # set this to your Supabase connection string in Render's dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGINS
+        sync: false   # set to your Netlify frontend URL once you have it
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: job-images
+      - key: FRONTEND_URL
+        sync: false   # set to your Netlify frontend URL — where the Gmail OAuth callback redirects back to
+      - key: GOOGLE_TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      # Gmail integration is optional — leave the three below unset and
+      # /api/gmail/* just reports "not configured" instead of erroring.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false   # must exactly match the redirect URI registered in Google Cloud Console

@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.log
+.DS_Store
+uploads/
+
+# Not part of World Shiner — leftover files, not tracked
+gatiExport.js
+worldshiner2.zip
+
+# Local Claude Code tool config, not project code
+.claude/
