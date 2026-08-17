@@ -10,3 +10,7 @@ worldshiner2.zip
 
 # Local Claude Code tool config, not project code
 .claude/
+
+# Real client/staff data pulled for reference — never goes in version control
+firestore-export/
+jewellery-tracker-*-firebase-adminsdk-*.json

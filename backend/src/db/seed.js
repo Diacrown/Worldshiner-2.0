@@ -11,22 +11,27 @@
 import bcrypt from 'bcryptjs';
 import { pool } from './pool.js';
 
+// letter_prefix + next_design_value: S/B/K/T and their starting values come
+// directly from the real Firestore `counters` collection (designNo=1344,
+// designNoB=703, designNoK=541, designNoT=572) — NOT reset to 1, so newly
+// claimed numbers never collide with real historical jobs still in use.
+// Offices with no real counter get a fresh one starting at 1.
 const OFFICES = [
-  { code: 'WS-SYD', name: 'Sydney', is_hq: false, org: 'DIACROWN' },
-  { code: 'WS-BNE', name: 'Brisbane', is_hq: false, org: 'DIACROWN' },
-  { code: 'WS-UK', name: 'UK', is_hq: false, org: 'DIACROWN', has_assay_office: true },
-  { code: 'WS-MEL', name: 'Melbourne', is_hq: false, org: 'DIACROWN' },
-  { code: 'WS-NZ', name: 'New Zealand', is_hq: false, org: 'DIACROWN' },
-  { code: 'WS-POL', name: 'Poland', is_hq: false, org: 'DIACROWN' },
-  { code: 'DM-USA', name: 'Texas', is_hq: false, org: 'DIACROWN' },
-  { code: 'WS-IT', name: 'Italy', is_hq: false, org: 'DIACROWN' },
-  { code: 'DM-GER', name: 'Germany', is_hq: false, org: 'DIACROWN' },
+  { code: 'WS-SYD', name: 'Sydney', is_hq: false, org: 'DIACROWN', letter_prefix: 'S', next_design_value: 1344 },
+  { code: 'WS-BNE', name: 'Brisbane', is_hq: false, org: 'DIACROWN', letter_prefix: 'B', next_design_value: 703 },
+  { code: 'WS-UK', name: 'UK', is_hq: false, org: 'DIACROWN', has_assay_office: true, letter_prefix: 'K', next_design_value: 541 },
+  { code: 'WS-MEL', name: 'Melbourne', is_hq: false, org: 'DIACROWN', letter_prefix: 'M', next_design_value: 1 },
+  { code: 'WS-NZ', name: 'New Zealand', is_hq: false, org: 'DIACROWN', letter_prefix: 'N', next_design_value: 1 },
+  { code: 'WS-POL', name: 'Poland', is_hq: false, org: 'DIACROWN', letter_prefix: 'P', next_design_value: 1 },
+  { code: 'DM-USA', name: 'Texas', is_hq: false, org: 'DIACROWN', letter_prefix: 'T', next_design_value: 572 },
+  { code: 'WS-IT', name: 'Italy', is_hq: false, org: 'DIACROWN', letter_prefix: 'I', next_design_value: 1 },
+  { code: 'DM-GER', name: 'Germany', is_hq: false, org: 'DIACROWN', letter_prefix: 'G', next_design_value: 1 },
   { code: 'HQ', name: 'Head Office / India (Diacrown)', is_hq: true, org: 'DIACROWN' },
   // DIAMORE: real infra doesn't exist yet for either of these — placeholders
   // so the org layer and its scoping rules can be built and tested now.
   // Rename DM-LOC1 to the actual location's real code once it's confirmed.
   { code: 'DM-HQ', name: 'Head Office / India (Diamore)', is_hq: true, org: 'DIAMORE' },
-  { code: 'DM-LOC1', name: 'Diamore Location 1 (placeholder — rename once confirmed)', is_hq: false, org: 'DIAMORE' },
+  { code: 'DM-LOC1', name: 'Diamore Location 1 (placeholder — rename once confirmed)', is_hq: false, org: 'DIAMORE', letter_prefix: 'D', next_design_value: 1 },
 ];
 
 // code, label, sort_order, is_system_only, is_archive
@@ -151,10 +156,17 @@ async function seed() {
     for (const o of OFFICES) {
       const { rows: orgRows } = await client.query('SELECT id FROM orgs WHERE code = $1', [o.org]);
       await client.query(
-        `INSERT INTO offices (code, name, is_hq, org_id, has_assay_office) VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO offices (code, name, is_hq, org_id, has_assay_office, letter_prefix, next_design_value)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, is_hq = EXCLUDED.is_hq, org_id = EXCLUDED.org_id,
-           has_assay_office = EXCLUDED.has_assay_office`,
-        [o.code, o.name, o.is_hq, orgRows[0].id, !!o.has_assay_office]
+           has_assay_office = EXCLUDED.has_assay_office,
+           -- Backfill letter_prefix/next_design_value only the FIRST time an
+           -- existing office row gets one (i.e. it's currently NULL) — once
+           -- set, re-seeding must never reset a counter that's already live
+           -- and incrementing.
+           letter_prefix = COALESCE(offices.letter_prefix, EXCLUDED.letter_prefix),
+           next_design_value = CASE WHEN offices.letter_prefix IS NULL THEN EXCLUDED.next_design_value ELSE offices.next_design_value END`,
+        [o.code, o.name, o.is_hq, orgRows[0].id, !!o.has_assay_office, o.letter_prefix || null, o.next_design_value || 1]
       );
     }
     console.log(`[seed] offices: ${OFFICES.length}`);
@@ -196,11 +208,6 @@ async function seed() {
       );
     }
     console.log(`[seed] hq_to_branch_headline_map: ${Object.keys(HQ_TO_BRANCH_HEADLINE).length}`);
-
-    await client.query(
-      `INSERT INTO design_number_counter (id, next_value) VALUES (1, 1)
-       ON CONFLICT (id) DO NOTHING`
-    );
 
     // Demo accounts only — replace with real staff via POST /api/users.
     // Password for every demo account below is: demo1234

@@ -100,3 +100,46 @@ jobItemsRouter.delete('/jobs/:jobId/client-items/:id', async (req, res, next) =>
     next(err);
   }
 });
+
+// ---- Setter / Polisher / Repairer ----
+
+jobItemsRouter.get('/jobs/:jobId/setter-polisher', async (req, res, next) => {
+  try {
+    const entries = await JobItemsService.listSetterPolisher(req.user, req.params.jobId);
+    if (entries === null) return res.status(404).json({ error: 'Job not found' });
+    res.json({ entries });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobItemsRouter.post('/jobs/:jobId/setter-polisher', async (req, res, next) => {
+  try {
+    const entry = await JobItemsService.addSetterPolisher(req.user, req.params.jobId, req.body || {});
+    if (entry === null) return res.status(404).json({ error: 'Job not found' });
+    res.status(201).json({ entry });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobItemsRouter.patch('/jobs/:jobId/setter-polisher/:id', async (req, res, next) => {
+  try {
+    const entry = await JobItemsService.updateSetterPolisher(req.user, req.params.jobId, req.params.id, req.body || {});
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    res.json({ entry });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobItemsRouter.delete('/jobs/:jobId/setter-polisher/:id', async (req, res, next) => {
+  try {
+    const deleted = await JobItemsService.deleteSetterPolisher(req.user, req.params.jobId, req.params.id);
+    if (deleted === null) return res.status(404).json({ error: 'Job not found' });
+    if (!deleted) return res.status(404).json({ error: 'Entry not found' });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
