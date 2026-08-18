@@ -17,6 +17,7 @@ import { reportsRouter } from './routes/reports.routes.js';
 import { importRouter } from './routes/import.routes.js';
 import { gmailRouter } from './routes/gmail.routes.js';
 import { officeChatRouter } from './routes/officeChat.routes.js';
+import { alertsRouter } from './routes/alerts.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -42,6 +43,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/import', importRouter);
 app.use('/api/gmail', gmailRouter);
 app.use('/api/office-chat', officeChatRouter);
+app.use('/api/alerts', alertsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

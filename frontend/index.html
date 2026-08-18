@@ -120,6 +120,35 @@
   .img-grid .del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px;text-align:center;padding:0}
 
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:100;display:none;max-width:90vw}
+
+  /* Section header + sub-tabs (SLA/Alerts) */
+  .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .section-head h2{font-size:18px;color:var(--text)}
+  .section-head p{font-size:13px;color:var(--text2);margin-top:2px}
+  .subtabs{display:flex;gap:4px;margin-bottom:16px;background:var(--s2);padding:4px;border-radius:var(--rad);width:fit-content}
+  .subtabs button{background:none;color:var(--text2);padding:7px 14px;font-size:13px;border-radius:4px}
+  .subtabs button.active{background:var(--s1);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .subtabpane{display:none}
+  .subtabpane.active{display:block}
+  .stat-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .stat-card{background:var(--s1);border-radius:var(--rad);padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,.04);min-width:120px}
+  .stat-card .num{font-size:22px;font-weight:700;color:var(--accent)}
+  .stat-card .lbl{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.03em}
+
+  /* Floating office chat */
+  .chat-fab{position:fixed;bottom:22px;right:22px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:60;display:flex;align-items:center;justify-content:center;padding:0}
+  .chat-fab:hover{background:var(--accent2)}
+  .chat-panel{position:fixed;bottom:88px;right:22px;width:340px;max-width:calc(100vw - 32px);background:var(--s1);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:60;display:none;flex-direction:column;overflow:hidden}
+  .chat-panel.open{display:flex}
+  .chat-panel-head{background:var(--accent);color:#fff;padding:12px 16px;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .chat-panel-head button{background:none;color:#fff;padding:2px 6px}
+  .chat-panel .chat-thread{max-height:320px;margin:10px;border-radius:8px}
+  .chat-panel .chat-send{margin:0 10px 10px}
+
+  /* Loading skeleton for tables while a request is in flight */
+  .loading-row td{color:var(--text2);font-style:italic;text-align:center;padding:24px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -141,7 +170,7 @@
       <div class="sidebar-brand"><span class="brand">💎 World Shiner</span><button id="sidebarToggle" title="Collapse">☰</button></div>
       <nav class="navlist">
         <button data-view="jobs" class="nav-item active">📋 <span>Jobs</span></button>
-        <button data-view="sla" class="nav-item" style="display:none">⏱ <span>SLA Alerts</span></button>
+        <button data-view="sla" class="nav-item" style="display:none">⏱ <span>Alerts</span></button>
         <button data-view="reports" class="nav-item" style="display:none">📊 <span>Reports</span></button>
         <button data-view="staff" class="nav-item" style="display:none">👥 <span>Staff</span></button>
         <button data-view="import" class="nav-item" style="display:none">📥 <span>Import</span></button>
@@ -162,32 +191,94 @@
             <input type="text" id="searchInput" placeholder="Search job name, contact, PO…">
             <select id="statusFilter"><option value="">All statuses</option></select>
             <span class="spacer"></span>
+            <button class="btn-ghost" id="batchAssayBtn" style="display:none">⚖ Batch Assay</button>
             <button class="btn-primary" id="newJobBtn">+ New Job</button>
           </div>
           <table id="jobsTable">
-            <thead><tr><th>Job</th><th>Contact</th><th>Priority</th><th>Status</th><th>PO #</th><th>Delivery</th><th></th></tr></thead>
+            <thead><tr><th id="selectColHead" style="display:none;width:30px"></th><th>Job</th><th>Contact</th><th>Priority</th><th>Status</th><th>PO #</th><th>Delivery</th><th></th></tr></thead>
             <tbody id="jobsBody"></tbody>
           </table>
           <div class="empty" id="emptyState" style="display:none">No jobs yet — create the first one.</div>
         </div>
 
         <div id="slaView" style="display:none">
-          <div class="toolbar"><h2 style="font-size:16px">SLA Alerts</h2></div>
-          <table>
-            <thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Status</th><th>SLA Rule</th><th>Time in status</th><th>Threshold</th><th>Overage</th></tr></thead>
-            <tbody id="slaBody"></tbody>
-          </table>
-          <div class="empty" id="slaEmptyState" style="display:none">No SLA breaches right now.</div>
+          <div class="section-head"><div><h2>Alerts</h2><p>Jobs that need attention, surfaced automatically</p></div></div>
+          <div class="subtabs">
+            <button class="subtab-btn active" data-subtab="slaBreaches">SLA Breaches</button>
+            <button class="subtab-btn" data-subtab="needsAttention">Needs Attention</button>
+          </div>
+
+          <div class="subtabpane active" id="subtab-slaBreaches">
+            <table>
+              <thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Status</th><th>SLA Rule</th><th>Time in status</th><th>Threshold</th><th>Overage</th></tr></thead>
+              <tbody id="slaBody"></tbody>
+            </table>
+            <div class="empty" id="slaEmptyState" style="display:none">No SLA breaches right now.</div>
+          </div>
+
+          <div class="subtabpane" id="subtab-needsAttention">
+            <h2 style="font-size:14px;margin:14px 0 8px">📅 Due within 3 days</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Delivery Date</th><th></th></tr></thead><tbody id="alertsDueSoonBody"></tbody></table>
+            <div class="empty" id="alertsDueSoonEmpty" style="display:none">Nothing due in the next 3 days.</div>
+
+            <h2 style="font-size:14px;margin:20px 0 8px">🌏 Awaiting overseas update</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Last HQ update</th><th></th></tr></thead><tbody id="alertsOverseasBody"></tbody></table>
+            <div class="empty" id="alertsOverseasEmpty" style="display:none">Nothing waiting on India right now.</div>
+
+            <h2 style="font-size:14px;margin:20px 0 8px">📞 Client chase-up due</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Follow-up date</th><th></th></tr></thead><tbody id="alertsChaseBody"></tbody></table>
+            <div class="empty" id="alertsChaseEmpty" style="display:none">No client follow-ups due.</div>
+          </div>
         </div>
         <div id="reportsView" style="display:none">
-          <div class="toolbar">
-            <input type="month" id="rep_month">
-            <select id="rep_office" style="width:auto"></select>
-            <button class="btn-ghost" id="rep_generateBtn">Generate</button>
-            <span class="spacer"></span>
-            <button class="btn-primary" id="rep_downloadBtn">Download PDF</button>
+          <div class="section-head"><div><h2>Reports</h2><p>Ready-made summaries and exports</p></div></div>
+          <div class="subtabs">
+            <button class="subtab-btn active" data-subtab="repMonthly">Monthly Summary</button>
+            <button class="subtab-btn" data-subtab="repSetterPolisher">Setter/Polisher/Repairer</button>
+            <button class="subtab-btn" data-subtab="repOverdue">Overdue</button>
+            <button class="subtab-btn" data-subtab="repClientItems">Client Items</button>
+            <button class="subtab-btn" data-subtab="repExport">Export</button>
           </div>
-          <div id="reportCards"></div>
+
+          <div class="subtabpane active" id="subtab-repMonthly">
+            <div class="toolbar">
+              <input type="month" id="rep_month">
+              <select id="rep_office" style="width:auto"></select>
+              <button class="btn-ghost" id="rep_generateBtn">Generate</button>
+              <span class="spacer"></span>
+              <button class="btn-primary" id="rep_downloadBtn">Download PDF</button>
+            </div>
+            <div id="reportCards"></div>
+          </div>
+
+          <div class="subtabpane" id="subtab-repSetterPolisher">
+            <table>
+              <thead><tr><th>Job</th><th>Office</th><th>Role</th><th>Person</th><th>Date sent</th><th>Due date</th><th>Fee</th></tr></thead>
+              <tbody id="repSetterPolisherBody"></tbody>
+            </table>
+            <div class="empty" id="repSetterPolisherEmpty" style="display:none">Nothing currently out with a setter, polisher, or repairer.</div>
+          </div>
+
+          <div class="subtabpane" id="subtab-repOverdue">
+            <table>
+              <thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Status</th><th>Days in status</th></tr></thead>
+              <tbody id="repOverdueBody"></tbody>
+            </table>
+            <div class="empty" id="repOverdueEmpty" style="display:none">Nothing stuck in Quoting or CAD Approved.</div>
+          </div>
+
+          <div class="subtabpane" id="subtab-repClientItems">
+            <table>
+              <thead><tr><th>Job</th><th>Office</th><th>Item description</th></tr></thead>
+              <tbody id="repClientItemsBody"></tbody>
+            </table>
+            <div class="empty" id="repClientItemsEmpty" style="display:none">No client-supplied items on record.</div>
+          </div>
+
+          <div class="subtabpane" id="subtab-repExport">
+            <p class="meta" style="margin-bottom:12px">Downloads every job currently visible to you as a CSV file.</p>
+            <button class="btn-primary" id="rep_csvBtn">⬇ Download CSV</button>
+          </div>
         </div>
         <div id="importView" style="display:none">
           <div id="imp_step1">
@@ -308,6 +399,19 @@
       <div><label>PO Number</label><input id="d_po"></div>
       <div class="checkline" style="margin-top:22px"><input type="checkbox" id="d_semiMount"><label style="margin:0">Client's own stone / semi-mount</label></div>
       <div class="full"><label>Notes</label><textarea id="d_notes" rows="2"></textarea></div>
+      <div class="full"><label>Client Note (with timestamp)</label><textarea id="d_clientComment" rows="2" placeholder="e.g. client asked for a 2-week delay"></textarea></div>
+      <div class="full">
+        <label>Follow-up / chase-up date</label>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input id="d_followUpDate" type="date" style="max-width:160px">
+          <button type="button" class="btn-ghost btn-sm" data-days="3">+3d</button>
+          <button type="button" class="btn-ghost btn-sm" data-days="5">+5d</button>
+          <button type="button" class="btn-ghost btn-sm" data-days="7">+7d</button>
+          <button type="button" class="btn-ghost btn-sm" data-days="14">+14d</button>
+          <button type="button" class="btn-ghost btn-sm" data-days="30">+30d</button>
+          <button type="button" class="btn-ghost btn-sm" id="clearFollowUp">Clear</button>
+        </div>
+      </div>
     </div>
     <div class="actions" style="margin-top:10px"><button class="btn-primary btn-sm" id="saveJobEdit">Save changes</button></div>
 
@@ -318,6 +422,8 @@
       <button class="tab-btn" data-tab="images">Images</button>
       <button class="tab-btn" data-tab="design">Design Entries</button>
       <button class="tab-btn" data-tab="items">Client Items</button>
+      <button class="tab-btn" data-tab="setterpolisher">Setter/Polisher/Repairer</button>
+      <button class="tab-btn" data-tab="assay" id="assayTabBtn" style="display:none">Assay Office</button>
     </div>
 
     <div class="tabpane active" id="tab-history"><div id="historyList"></div></div>
@@ -376,7 +482,48 @@
       <div class="actions"><button class="btn-primary btn-sm" id="addClientItemBtn">Add item</button></div>
     </div>
 
+    <div class="tabpane" id="tab-setterpolisher">
+      <div id="setterPolisherList"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Role</label>
+          <select id="sp_role"><option value="setter">Setter</option><option value="polisher">Polisher</option><option value="repairer">Repairer</option></select>
+        </div>
+        <div><label>Person name</label><input id="sp_name"></div>
+        <div><label>Fee</label><input id="sp_fee" type="number" step="0.01"></div>
+        <div><label>Date sent</label><input id="sp_dateSent" type="date"></div>
+        <div><label>Due date</label><input id="sp_dueDate" type="date"></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="addSetterPolisherBtn">Add</button></div>
+    </div>
+
+    <div class="tabpane" id="tab-assay">
+      <div class="checkline" style="margin-bottom:12px"><input type="checkbox" id="assay_inAssay"><label style="margin:0">This job is currently at the assay office</label></div>
+      <div class="grid2">
+        <div><label>Assay office name</label><input id="assay_officeName"></div>
+        <div><label>Invoice number</label><input id="assay_invoiceNo"></div>
+        <div><label>Date sent</label><input id="assay_dateSent" type="date"></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="saveAssayBtn">Save assay details</button></div>
+    </div>
+
     <div class="actions"><button class="btn-ghost" id="closeDetail">Close</button></div>
+  </div>
+</div>
+
+<!-- Batch Assay -->
+<div class="overlay" id="batchAssayOverlay">
+  <div class="sheet">
+    <h2>Batch Assay</h2>
+    <p class="meta" style="margin-bottom:12px">Applies these assay details to every currently-selected job.</p>
+    <div class="grid2">
+      <div class="full"><label>Assay office name</label><input id="ba_officeName"></div>
+      <div><label>Invoice number</label><input id="ba_invoiceNo"></div>
+      <div><label>Date sent</label><input id="ba_dateSent" type="date"></div>
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelBatchAssay">Cancel</button>
+      <button class="btn-primary" id="saveBatchAssay">Save to selected jobs</button>
+    </div>
   </div>
 </div>
 
@@ -403,6 +550,17 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Office chat (floating) -->
+<button class="chat-fab" id="officeChatFab" title="Office chat" style="display:none">💬</button>
+<div class="chat-panel" id="officeChatPanel">
+  <div class="chat-panel-head"><span id="officeChatTitle">Office Chat</span><button id="closeOfficeChat">✕</button></div>
+  <div class="chat-thread" id="officeChatThread"></div>
+  <div class="chat-send">
+    <textarea id="officeChatInput" rows="2" placeholder="Message…"></textarea>
+    <button class="btn-primary btn-sm" id="officeChatSendBtn">Send</button>
+  </div>
+</div>
 
 <script>
 const API_BASE = window.WORLDSHINER_API_BASE || 'http://localhost:4000/api';
@@ -450,6 +608,7 @@ $('signOutBtn').onclick = () => {
   TOKEN = null; USER = null;
   localStorage.removeItem('ws2_token'); localStorage.removeItem('ws2_user');
   $('app').style.display = 'none'; $('loginScreen').style.display = 'flex';
+  $('officeChatFab').style.display = 'none'; $('officeChatPanel').classList.remove('open');
 };
 
 async function showApp() {
@@ -464,9 +623,14 @@ async function showApp() {
   document.querySelector('[data-view="reports"]').style.display = isHqOrAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="mail"]').style.display = isHqOrAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="sla"]').style.display = 'flex';
+  const hasAssay = !!USER.officeHasAssay;
+  $('assayTabBtn').style.display = hasAssay ? 'inline-block' : 'none';
+  $('batchAssayBtn').style.display = hasAssay ? 'inline-block' : 'none';
+  $('selectColHead').style.display = hasAssay ? 'table-cell' : 'none';
   if (canSwitch) await loadOffices();
   await loadStatuses();
   await loadJobs();
+  initOfficeChat();
 }
 
 // ---- Nav ----
@@ -496,6 +660,35 @@ async function loadSlaAlerts() {
       <td><span class="badge ${b.overageHours > b.thresholdHours ? 'sla-severe' : 'sla-mild'}">+${b.overageHours}h</span></td>
     </tr>`).join('');
 }
+async function loadAlerts() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams();
+  if (office) params.set('office', office);
+  const { dueSoon, awaitingOverseas, chaseUp } = await api(`/alerts?${params.toString()}`);
+  const snoozeBtn = (id) => `<button class="btn-ghost btn-sm" data-snooze="${id}">💤 Snooze 10d</button>`;
+
+  $('alertsDueSoonEmpty').style.display = dueSoon.length ? 'none' : 'block';
+  $('alertsDueSoonBody').innerHTML = dueSoon.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.client_delivery_date ? new Date(j.client_delivery_date).toLocaleDateString() : '—'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  $('alertsOverseasEmpty').style.display = awaitingOverseas.length ? 'none' : 'block';
+  $('alertsOverseasBody').innerHTML = awaitingOverseas.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.last_hq_update ? new Date(j.last_hq_update).toLocaleDateString() : 'never'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  $('alertsChaseEmpty').style.display = chaseUp.length ? 'none' : 'block';
+  $('alertsChaseBody').innerHTML = chaseUp.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.follow_up_date ? new Date(j.follow_up_date).toLocaleDateString() : '—'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  document.querySelectorAll('#subtab-needsAttention button[data-snooze]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/alerts/jobs/${b.dataset.snooze}/snooze`, { method: 'POST', body: JSON.stringify({ days: 10 }) }); toast('Snoozed for 10 days.'); await loadAlerts(); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
 function initReportsView() {
   if (!$('rep_month').value) {
     const now = new Date();
@@ -520,6 +713,49 @@ async function generateReport() {
   } catch (e) { toast(e.message); }
 }
 $('rep_generateBtn').onclick = generateReport;
+async function loadSetterPolisherReport() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams(); if (office) params.set('office', office);
+  try {
+    const { entries } = await api(`/reports/setter-polisher-summary?${params.toString()}`);
+    $('repSetterPolisherEmpty').style.display = entries.length ? 'none' : 'block';
+    $('repSetterPolisherBody').innerHTML = entries.map(e => `
+      <tr><td>${escapeHtml(e.job_name)}</td><td>${escapeHtml(e.office_name)}</td><td style="text-transform:capitalize">${e.role_type}</td>
+      <td>${escapeHtml(e.person_name || '—')}</td><td>${e.date_sent ? new Date(e.date_sent).toLocaleDateString() : '—'}</td>
+      <td>${e.due_date ? new Date(e.due_date).toLocaleDateString() : '—'}</td><td>${e.fee || '—'}</td></tr>`).join('');
+  } catch (e) { toast(e.message); }
+}
+async function loadOverdueReport() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams(); if (office) params.set('office', office);
+  try {
+    const { jobs } = await api(`/reports/overdue?${params.toString()}`);
+    $('repOverdueEmpty').style.display = jobs.length ? 'none' : 'block';
+    $('repOverdueBody').innerHTML = jobs.map(j => `
+      <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+      <td>${escapeHtml(j.status_code)}</td><td>${j.daysInStatus}d</td></tr>`).join('');
+  } catch (e) { toast(e.message); }
+}
+async function loadClientItemsReport() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams(); if (office) params.set('office', office);
+  try {
+    const { items } = await api(`/reports/client-items?${params.toString()}`);
+    $('repClientItemsEmpty').style.display = items.length ? 'none' : 'block';
+    $('repClientItemsBody').innerHTML = items.map(i => `
+      <tr><td>${escapeHtml(i.job_name)}</td><td>${escapeHtml(i.office_name)}</td><td>${escapeHtml(i.description || '—')}</td></tr>`).join('');
+  } catch (e) { toast(e.message); }
+}
+$('rep_csvBtn').onclick = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/reports/export.csv`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'worldshiner-jobs.csv';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  } catch (e) { toast(e.message); }
+};
 $('rep_downloadBtn').onclick = async () => {
   const [year, month] = $('rep_month').value.split('-').map(Number);
   if (!year || !month) { toast('Pick a month first.'); return; }
@@ -626,6 +862,25 @@ function switchView(view) {
   VIEWS[view]?.onEnter?.();
 }
 document.querySelectorAll('.navlist [data-view]').forEach(btn => btn.onclick = () => switchView(btn.dataset.view));
+
+// Generic sub-tab handling for Alerts (SLA Breaches / Needs Attention) and
+// Reports (Monthly / Setter-Polisher / Overdue / Client Items / Export).
+const SUBTAB_ENTER = {
+  needsAttention: () => loadAlerts(),
+  repSetterPolisher: () => loadSetterPolisherReport(),
+  repOverdue: () => loadOverdueReport(),
+  repClientItems: () => loadClientItemsReport(),
+};
+document.querySelectorAll('.subtab-btn').forEach(btn => {
+  btn.onclick = () => {
+    const scope = btn.parentElement.parentElement; // the view div containing this subtabs group
+    scope.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+    scope.querySelectorAll('.subtabpane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    scope.querySelector('#subtab-' + btn.dataset.subtab).classList.add('active');
+    SUBTAB_ENTER[btn.dataset.subtab]?.();
+  };
+});
 $('sidebarToggle').onclick = () => {
   $('sidebar').classList.toggle('collapsed');
   localStorage.setItem('ws2_sidebar_collapsed', $('sidebar').classList.contains('collapsed') ? '1' : '0');
@@ -667,12 +922,15 @@ async function loadJobs() {
   } catch (e) { UNREAD = {}; }
   renderJobs();
 }
+let SELECTED_JOB_IDS = new Set();
 function renderJobs() {
   const body = $('jobsBody');
+  const hasAssay = !!USER.officeHasAssay;
   $('emptyState').style.display = JOBS.length ? 'none' : 'block';
   body.innerHTML = JOBS.map(j => `
     <tr class="job-row" data-id="${j.id}">
-      <td>${escapeHtml(j.job_name)}${j.office_code ? ` <span style="color:var(--text2);font-size:11px">(${j.office_code})</span>` : ''}${UNREAD[j.id] ? '<span class="unread-dot" title="'+UNREAD[j.id]+' unread"></span>' : ''}</td>
+      ${hasAssay ? `<td onclick="event.stopPropagation()"><input type="checkbox" data-select="${j.id}" ${SELECTED_JOB_IDS.has(String(j.id)) ? 'checked' : ''}></td>` : ''}
+      <td>${escapeHtml(j.job_name)}${j.office_code ? ` <span style="color:var(--text2);font-size:11px">(${j.office_code})</span>` : ''}${UNREAD[j.id] ? '<span class="unread-dot" title="'+UNREAD[j.id]+' unread"></span>' : ''}${j.in_assay ? ' <span class="badge sla-mild">⚖ Assay</span>' : ''}</td>
       <td>${escapeHtml(j.contact_person || '—')}</td>
       <td><span class="badge ${j.priority}">${j.priority}</span></td>
       <td><select class="status-inline" data-id="${j.id}" onclick="event.stopPropagation()">${statusOptionsHtml(j.status_code)}</select></td>
@@ -683,6 +941,9 @@ function renderJobs() {
   body.querySelectorAll('tr.job-row').forEach(tr => tr.onclick = () => openJobDetail(tr.dataset.id));
   body.querySelectorAll('button[data-open]').forEach(b => b.onclick = () => openJobDetail(b.dataset.open));
   body.querySelectorAll('select.status-inline').forEach(sel => sel.onchange = () => changeStatus(sel.dataset.id, sel.value, sel));
+  body.querySelectorAll('input[data-select]').forEach(cb => {
+    cb.onchange = () => { cb.checked ? SELECTED_JOB_IDS.add(cb.dataset.select) : SELECTED_JOB_IDS.delete(cb.dataset.select); };
+  });
 }
 $('searchInput').addEventListener('input', debounce(loadJobs, 350));
 $('statusFilter').onchange = loadJobs;
@@ -701,6 +962,27 @@ async function changeStatus(jobId, statusCode, selEl) {
     } else { toast(e.message); await loadJobs(); }
   }
 }
+
+// ---- Batch Assay ----
+$('batchAssayBtn').onclick = () => {
+  if (!SELECTED_JOB_IDS.size) { toast('Select one or more jobs first (tick the checkboxes).'); return; }
+  $('batchAssayOverlay').classList.add('open');
+};
+$('cancelBatchAssay').onclick = () => $('batchAssayOverlay').classList.remove('open');
+$('saveBatchAssay').onclick = async () => {
+  try {
+    const result = await api('/jobs/assay/batch', { method: 'POST', body: JSON.stringify({
+      jobIds: [...SELECTED_JOB_IDS].map(Number),
+      assayOfficeName: $('ba_officeName').value.trim(), assayInvoiceNo: $('ba_invoiceNo').value.trim(),
+      assayDateSent: $('ba_dateSent').value || null,
+    })});
+    toast(`Saved to ${result.updated.length} job(s).`);
+    $('batchAssayOverlay').classList.remove('open');
+    SELECTED_JOB_IDS.clear();
+    ['ba_officeName','ba_invoiceNo','ba_dateSent'].forEach(id => $(id).value = '');
+    await loadJobs();
+  } catch (e) { toast(e.message); }
+};
 
 // ---- New job ----
 $('newJobBtn').onclick = () => $('newJobOverlay').classList.add('open');
@@ -742,10 +1024,21 @@ async function openJobDetail(jobId) {
   $('d_po').value = job?.po_number || '';
   $('d_semiMount').checked = !!job?.client_stone_semi_mount;
   $('d_notes').value = job?.notes || '';
+  $('d_clientComment').value = '';
+  $('d_followUpDate').value = job?.follow_up_date ? job.follow_up_date.slice(0,10) : '';
   $('jobDetailOverlay').classList.add('open');
-  await Promise.all([loadHistory(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId)]);
+  const tasks = [loadHistory(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId)];
+  if (USER.officeHasAssay) tasks.push(loadAssayTab(jobId));
+  await Promise.all(tasks);
   api(`/jobs/${jobId}/chat/read`, { method: 'POST' }).catch(() => {});
 }
+document.querySelectorAll('button[data-days]').forEach(btn => {
+  btn.onclick = () => {
+    const d = new Date(); d.setDate(d.getDate() + Number(btn.dataset.days));
+    $('d_followUpDate').value = d.toISOString().slice(0, 10);
+  };
+});
+$('clearFollowUp').onclick = () => { $('d_followUpDate').value = ''; };
 $('closeDetail').onclick = () => { $('jobDetailOverlay').classList.remove('open'); loadJobs(); };
 
 // ---- WhatsApp share ----
@@ -765,6 +1058,8 @@ $('saveJobEdit').onclick = async () => {
       contactPerson: $('d_contact').value.trim(), clientPhone: $('d_phone').value.trim(),
       priority: $('d_priority').value, clientDeliveryDate: $('d_deliveryDate').value || null,
       poNumber: $('d_po').value.trim(), clientStoneSemiMount: $('d_semiMount').checked, notes: $('d_notes').value.trim(),
+      followUpDate: $('d_followUpDate').value || null,
+      ...($('d_clientComment').value.trim() ? { clientComment: $('d_clientComment').value.trim() } : {}),
     })});
     toast('Job updated.'); await loadJobs();
   } catch (e) { toast(e.message); }
@@ -899,6 +1194,56 @@ $('addClientItemBtn').onclick = async () => {
   } catch (e) { toast(e.message); }
 };
 
+// ---- Setter / Polisher / Repairer tab ----
+async function loadSetterPolisher(jobId) {
+  const { entries } = await api(`/jobs/${jobId}/setter-polisher`);
+  $('setterPolisherList').innerHTML = entries.map(e => `
+    <div class="history-item" data-id="${e.id}">
+      <div><b style="text-transform:capitalize">${escapeHtml(e.role_type)}</b> — ${escapeHtml(e.person_name || 'unnamed')}
+        <button class="btn-ghost btn-sm" data-del-sp="${e.id}" style="float:right">Delete</button>
+        ${!e.date_returned ? `<button class="btn-ghost btn-sm" data-return-sp="${e.id}" style="float:right;margin-right:6px">Mark returned</button>` : ''}
+      </div>
+      <div class="meta">${e.fee ? 'Fee: ' + e.fee + ' · ' : ''}Sent ${e.date_sent ? new Date(e.date_sent).toLocaleDateString() : '—'}${e.due_date ? ' · Due ' + new Date(e.due_date).toLocaleDateString() : ''}${e.date_returned ? ' · Returned ' + new Date(e.date_returned).toLocaleDateString() : ''}</div>
+    </div>`).join('') || '<p class="meta">No setter/polisher/repairer records yet.</p>';
+  $('setterPolisherList').querySelectorAll('button[data-del-sp]').forEach(b => {
+    b.onclick = async () => { try { await api(`/jobs/${jobId}/setter-polisher/${b.dataset.delSp}`, { method: 'DELETE' }); await loadSetterPolisher(jobId); } catch (e) { toast(e.message); } };
+  });
+  $('setterPolisherList').querySelectorAll('button[data-return-sp]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/jobs/${jobId}/setter-polisher/${b.dataset.returnSp}`, { method: 'PATCH', body: JSON.stringify({ dateReturned: new Date().toISOString().slice(0,10) }) }); await loadSetterPolisher(jobId); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('addSetterPolisherBtn').onclick = async () => {
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/setter-polisher`, { method: 'POST', body: JSON.stringify({
+      roleType: $('sp_role').value, personName: $('sp_name').value.trim(),
+      fee: $('sp_fee').value || null, dateSent: $('sp_dateSent').value || null, dueDate: $('sp_dueDate').value || null,
+    })});
+    ['sp_name','sp_fee','sp_dateSent','sp_dueDate'].forEach(id => $(id).value = '');
+    toast('Added.'); await loadSetterPolisher(CURRENT_JOB_ID);
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Assay Office tab (UK-only) ----
+async function loadAssayTab(jobId) {
+  const { job } = await api(`/jobs/${jobId}`);
+  $('assay_inAssay').checked = !!job.in_assay;
+  $('assay_officeName').value = job.assay_office_name || '';
+  $('assay_invoiceNo').value = job.assay_invoice_no || '';
+  $('assay_dateSent').value = job.assay_date_sent ? job.assay_date_sent.slice(0,10) : '';
+}
+$('saveAssayBtn').onclick = async () => {
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}`, { method: 'PATCH', body: JSON.stringify({
+      inAssay: $('assay_inAssay').checked, assayOfficeName: $('assay_officeName').value.trim(),
+      assayInvoiceNo: $('assay_invoiceNo').value.trim(), assayDateSent: $('assay_dateSent').value || null,
+    })});
+    toast('Assay details saved.'); await loadJobs();
+  } catch (e) { toast(e.message); }
+};
+
 $('addImageBtn').onclick = () => $('imgFileInput').click();
 $('imgFileInput').onchange = async () => {
   const file = $('imgFileInput').files[0];
@@ -989,6 +1334,34 @@ $('saveInvite').onclick = async () => {
     $('inv_master').checked = false; $('inv_orgAdmin').checked = false;
     toast('Invite created.'); await loadInvites();
   } catch (e) { toast(e.message); }
+};
+
+// ---- Office chat (floating widget) ----
+function initOfficeChat() {
+  $('officeChatTitle').textContent = `Office Chat · ${USER.officeName}`;
+  $('officeChatFab').style.display = 'flex';
+}
+async function loadOfficeChat() {
+  try {
+    const { messages } = await api('/office-chat');
+    $('officeChatThread').innerHTML = messages.map(m => `
+      <div class="chat-msg">
+        <div class="meta">${escapeHtml(m.sender_display_name || m.sender_name || 'Someone')} · ${new Date(m.created_at).toLocaleString()}</div>
+        <div>${escapeHtml(m.body || '')}</div>
+      </div>`).join('') || '<p class="meta">No messages yet — say hi.</p>';
+    $('officeChatThread').scrollTop = $('officeChatThread').scrollHeight;
+  } catch (e) { toast(e.message); }
+}
+$('officeChatFab').onclick = () => {
+  $('officeChatPanel').classList.add('open');
+  loadOfficeChat();
+};
+$('closeOfficeChat').onclick = () => $('officeChatPanel').classList.remove('open');
+$('officeChatSendBtn').onclick = async () => {
+  const body = $('officeChatInput').value.trim();
+  if (!body) return;
+  try { await api('/office-chat', { method: 'POST', body: JSON.stringify({ body }) }); $('officeChatInput').value = ''; await loadOfficeChat(); }
+  catch (e) { toast(e.message); }
 };
 
 // ---- Boot ----

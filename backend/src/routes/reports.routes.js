@@ -37,3 +37,38 @@ reportsRouter.get('/monthly-summary/pdf', async (req, res, next) => {
     next(err);
   }
 });
+
+reportsRouter.get('/setter-polisher-summary', async (req, res, next) => {
+  try {
+    res.json({ entries: await ReportsService.getSetterPolisherSummary(req.user, { officeOverride: req.query.office }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+reportsRouter.get('/overdue', async (req, res, next) => {
+  try {
+    res.json({ jobs: await ReportsService.getOverdueQuotingAndCad(req.user, { officeOverride: req.query.office }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+reportsRouter.get('/client-items', async (req, res, next) => {
+  try {
+    res.json({ items: await ReportsService.getClientItemsReport(req.user, { officeOverride: req.query.office }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+reportsRouter.get('/export.csv', async (req, res, next) => {
+  try {
+    const csv = await ReportsService.exportJobsCsv(req.user, { officeOverride: req.query.office, status: req.query.status, search: req.query.search });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="worldshiner-jobs.csv"');
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});

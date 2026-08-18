@@ -55,13 +55,34 @@ export async function updateJob(user, jobId, input) {
     priority: 'priority', clientDeliveryDate: 'client_delivery_date', poNumber: 'po_number',
     renderLink: 'render_link', diacrownSsp: 'diacrown_ssp', invoiceAmount: 'invoice_amount',
     notes: 'notes', clientStoneSemiMount: 'client_stone_semi_mount',
+    followUpDate: 'follow_up_date', clientComment: 'client_comment',
   };
+  // Assay fields are server-side gated, not just hidden in the UI — writing
+  // them from a non-UK-profile office is rejected outright, matching the
+  // project's established "check it in the handler, not just the route"
+  // pattern (see docs/ARCHITECTURE.md §7).
+  const assayFieldMap = {
+    inAssay: 'in_assay', assayOfficeName: 'assay_office_name',
+    assayInvoiceNo: 'assay_invoice_no', assayDateSent: 'assay_date_sent',
+  };
+  const touchesAssay = Object.keys(assayFieldMap).some((k) => input[k] !== undefined);
+  if (touchesAssay && !user.officeHasAssay) {
+    const err = new Error('This office does not have Assay Office tracking enabled');
+    err.status = 403;
+    throw err;
+  }
+  if (touchesAssay) Object.assign(fieldMap, assayFieldMap);
+
   const sets = [];
   const params = [];
   for (const [key, col] of Object.entries(fieldMap)) {
     if (input[key] !== undefined) {
       params.push(input[key]);
       sets.push(`${col} = $${params.length}`);
+      if (key === 'clientComment' && input[key]) {
+        params.push(new Date().toISOString());
+        sets.push(`client_comment_at = $${params.length}`);
+      }
     }
   }
   if (!sets.length) return existing;
@@ -72,6 +93,30 @@ export async function updateJob(user, jobId, input) {
     params
   );
   return rows[0];
+}
+
+// Batch Assay: save assay office/invoice/date to several jobs at once,
+// matching the manual's "Batch Assay -> Save to Selected Jobs" flow.
+export async function batchUpdateAssay(user, { jobIds, assayOfficeName, assayInvoiceNo, assayDateSent }) {
+  if (!user.officeHasAssay) {
+    const err = new Error('This office does not have Assay Office tracking enabled');
+    err.status = 403;
+    throw err;
+  }
+  if (!Array.isArray(jobIds) || !jobIds.length) {
+    const err = new Error('jobIds must be a non-empty array');
+    err.status = 400;
+    throw err;
+  }
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE jobs SET in_assay = TRUE, assay_office_name = $1, assay_invoice_no = $2, assay_date_sent = $3
+       WHERE id = ANY($4) AND office_id = $5
+       RETURNING id`,
+      [assayOfficeName || null, assayInvoiceNo || null, assayDateSent || null, jobIds, user.officeId]
+    );
+    return { updated: rows.map((r) => r.id) };
+  });
 }
 
 export async function createJob(user, officeId, input) {

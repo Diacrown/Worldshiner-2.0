@@ -85,3 +85,87 @@ export function renderMonthlyReportPdf(summaries, { year, month }, res) {
 
   doc.end();
 }
+
+// Jobs currently out with a setter/polisher/repairer, i.e. sent but not yet
+// returned (date_sent set, date_returned still null).
+export async function getSetterPolisherSummary(user, { officeOverride } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const sql = `
+    SELECT sp.role_type, sp.person_name, sp.date_sent, sp.due_date, sp.fee,
+           j.id AS job_id, j.job_name, o.code AS office_code, o.name AS office_name
+    FROM job_setter_polisher sp
+    JOIN jobs j ON j.id = sp.job_id
+    JOIN offices o ON o.id = j.office_id
+    ${where}
+    ${where ? 'AND' : 'WHERE'} sp.date_sent IS NOT NULL AND sp.date_returned IS NULL
+    ORDER BY sp.role_type, sp.date_sent
+  `;
+  const { rows } = await pool.query(sql, params);
+  return rows;
+}
+
+// Jobs stuck in Quoting or CAD Approved past a threshold (days) — same shape
+// as the SLA breach query, but this pair of statuses specifically, per the
+// manual's "Overdue: Quoting & CAD Approved" report.
+export async function getOverdueQuotingAndCad(user, { officeOverride, thresholdDays = 5 } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const codesParamIndex = params.length + 1;
+  const sql = `
+    SELECT DISTINCT ON (j.id)
+      j.id, j.job_name, j.priority, j.status_code, o.code AS office_code, o.name AS office_name, h.changed_at
+    FROM jobs j
+    JOIN offices o ON o.id = j.office_id
+    JOIN job_status_history h ON h.job_id = j.id AND h.side = 'branch'
+    ${where}
+    ${where ? 'AND' : 'WHERE'} j.status_code = ANY($${codesParamIndex})
+    ORDER BY j.id, h.changed_at DESC
+  `;
+  const { rows } = await pool.query(sql, [...params, ['quoting', 'cad_approved']]);
+  const now = Date.now();
+  return rows
+    .map((r) => ({ ...r, daysInStatus: Math.round((now - new Date(r.changed_at).getTime()) / 86400000) }))
+    .filter((r) => r.daysInStatus >= thresholdDays)
+    .sort((a, b) => b.daysInStatus - a.daysInStatus);
+}
+
+export async function getClientItemsReport(user, { officeOverride } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const sql = `
+    SELECT ci.id, ci.description, j.id AS job_id, j.job_name, o.code AS office_code, o.name AS office_name
+    FROM job_client_items ci
+    JOIN jobs j ON j.id = ci.job_id
+    JOIN offices o ON o.id = j.office_id
+    ${where}
+    ORDER BY o.name, j.job_name
+  `;
+  const { rows } = await pool.query(sql, params);
+  return rows;
+}
+
+export async function exportJobsCsv(user, { officeOverride, status, search } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const extra = [];
+  if (status) { params.push(status); extra.push(`j.status_code = $${params.length}`); }
+  if (search) { params.push(`%${search}%`); extra.push(`j.job_name ILIKE $${params.length}`); }
+  let sql = `
+    SELECT j.job_name, j.contact_person, j.priority, j.status_code, o.name AS office_name,
+           j.po_number, j.design_no, j.client_delivery_date, j.created_at
+    FROM jobs j JOIN offices o ON o.id = j.office_id
+    ${where}
+  `;
+  if (extra.length) sql += (where ? ' AND ' : ' WHERE ') + extra.join(' AND ');
+  sql += ' ORDER BY j.created_at DESC';
+  const { rows } = await pool.query(sql, params);
+
+  const escape = (v) => {
+    if (v == null) return '';
+    const s = v instanceof Date ? v.toISOString() : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const headers = ['Job Name', 'Contact', 'Priority', 'Status', 'Office', 'PO Number', 'Design No', 'Delivery Date', 'Created At'];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    lines.push([r.job_name, r.contact_person, r.priority, r.status_code, r.office_name, r.po_number, r.design_no, r.client_delivery_date, r.created_at].map(escape).join(','));
+  }
+  return lines.join('\n');
+}

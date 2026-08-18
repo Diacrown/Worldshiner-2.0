@@ -22,6 +22,15 @@ jobsRouter.get('/', async (req, res, next) => {
   }
 });
 
+jobsRouter.post('/assay/batch', async (req, res, next) => {
+  try {
+    const result = await JobsService.batchUpdateAssay(req.user, req.body || {});
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 jobsRouter.get('/:id', async (req, res, next) => {
   try {
     const job = await JobsService.getJobById(req.user, req.params.id);
