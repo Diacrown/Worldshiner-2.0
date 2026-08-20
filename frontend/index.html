@@ -39,14 +39,14 @@
 
   #app{display:none}
   .app-shell{display:flex;min-height:100vh}
-  .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--accent);color:#fff;display:flex;flex-direction:column;transition:width .15s ease}
+  .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--accent);color:#fff;display:flex;flex-direction:column;transition:width .15s ease,transform .2s cubic-bezier(.16,1,.3,1)}
   .sidebar.collapsed{width:var(--sidebar-w-collapsed)}
   .sidebar-brand{display:flex;align-items:center;justify-content:space-between;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.12)}
   .sidebar-brand .brand{font-size:16px;color:#fff;white-space:nowrap;overflow:hidden}
   .sidebar.collapsed .sidebar-brand .brand{display:none}
   .sidebar-brand button{background:none;color:#fff;padding:4px 8px;font-size:16px}
   .navlist{display:flex;flex-direction:column;padding:10px;gap:2px}
-  .nav-item{display:flex;align-items:center;gap:10px;background:none;color:rgba(255,255,255,.78);text-align:left;padding:10px 12px;border-radius:var(--rad);font-weight:500;white-space:nowrap;overflow:hidden}
+  .nav-item{display:flex;align-items:center;gap:10px;background:none;color:rgba(255,255,255,.78);text-align:left;padding:10px 12px;border-radius:var(--rad);font-weight:500;white-space:nowrap;overflow:hidden;transition:background .12s ease,color .12s ease}
   .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
   .nav-item.active{background:rgba(255,255,255,.16);color:#fff}
   .sidebar.collapsed .nav-item span{display:none}
@@ -72,7 +72,7 @@
   th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--s3)}
   th{background:var(--s2);color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
   tr:last-child td{border-bottom:0}
-  tr.job-row{cursor:pointer}
+  tr.job-row{cursor:pointer;transition:background .12s ease}
   tr.job-row:hover{background:var(--s2)}
   .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
   .badge.High{background:#f8d9d3;color:var(--red)}
@@ -573,9 +573,67 @@ let CURRENT_JOB_ID = null;
 let UNREAD = {};
 
 const $ = (id) => document.getElementById(id);
+
+// ---- Motion (motion.dev vanilla JS API) ----
+// Loaded lazily off a CDN since this frontend is deliberately a single file with
+// no build step and no React. Every animation helper below degrades to a plain,
+// instant show/hide (the pre-existing behavior) if the import fails — offline
+// dev, a blocked CDN, etc. never break the app, only the polish.
+let M = null;
+import('https://cdn.jsdelivr.net/npm/motion@13/+esm').then(m => { M = m; }).catch(() => {});
+const EASE_OUT = [0.16, 1, 0.3, 1];
+
+function openSheet(overlay) {
+  overlay.classList.add('open');
+  if (!M) return;
+  M.animate(overlay, { opacity: [0, 1] }, { duration: 0.15 });
+  const sheet = overlay.querySelector('.sheet');
+  if (sheet) M.animate(sheet, { opacity: [0, 1], transform: ['translateY(8px) scale(.98)', 'translateY(0) scale(1)'] }, { duration: 0.18, ease: EASE_OUT });
+}
+// Animation promises are awaited with a bounded fallback timeout — if the
+// underlying WAAPI animation never signals completion for any reason (a
+// backgrounded/hidden tab can suspend it indefinitely in some browsers), the
+// UI must still unblock rather than leave a dialog stuck open.
+function settleWithin(promiseLike, ms) {
+  return Promise.race([Promise.resolve(promiseLike), new Promise(r => setTimeout(r, ms))]);
+}
+async function closeSheet(overlay) {
+  if (!M) { overlay.classList.remove('open'); return; }
+  const jobs = [M.animate(overlay, { opacity: [1, 0] }, { duration: 0.12 })];
+  const sheet = overlay.querySelector('.sheet');
+  if (sheet) jobs.push(M.animate(sheet, { opacity: [1, 0], transform: ['translateY(0) scale(1)', 'translateY(6px) scale(.98)'] }, { duration: 0.12 }));
+  await settleWithin(Promise.all(jobs), 400);
+  overlay.classList.remove('open');
+}
+function openChatPanel(panel) {
+  panel.classList.add('open');
+  if (!M) return;
+  M.animate(panel, { opacity: [0, 1], transform: ['translateY(10px) scale(.97)', 'translateY(0) scale(1)'] }, { duration: 0.18, ease: EASE_OUT });
+}
+async function closeChatPanel(panel) {
+  if (!M) { panel.classList.remove('open'); return; }
+  await settleWithin(M.animate(panel, { opacity: [1, 0], transform: ['translateY(0) scale(1)', 'translateY(8px) scale(.97)'] }, { duration: 0.13 }), 400);
+  panel.classList.remove('open');
+}
+function staggerIn(container, selector) {
+  if (!M || !container) return;
+  const els = [...container.querySelectorAll(selector)].slice(0, 40); // cap for very long lists
+  if (!els.length) return;
+  M.animate(els, { opacity: [0, 1], transform: ['translateY(4px)', 'translateY(0)'] }, { duration: 0.16, delay: M.stagger(0.012), ease: 'easeOut' });
+}
+function fadeIn(el, opts = {}) {
+  if (!M || !el) return;
+  M.animate(el, { opacity: [0, 1], transform: ['translateY(4px)', 'translateY(0)'] }, { duration: 0.14, ease: 'easeOut', ...opts });
+}
+
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.style.display = 'block';
-  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = 'none'), 3500);
+  clearTimeout(toast._t);
+  if (M) M.animate(t, { opacity: [0, 1], transform: ['translate(-50%, 8px)', 'translate(-50%, 0)'] }, { duration: 0.15 });
+  toast._t = setTimeout(() => {
+    if (!M) { t.style.display = 'none'; return; }
+    M.animate(t, { opacity: [1, 0], transform: ['translate(-50%, 0)', 'translate(-50%, 6px)'] }, { duration: 0.15 }).then(() => { t.style.display = 'none'; });
+  }, 3500);
 }
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -659,6 +717,7 @@ async function loadSlaAlerts() {
       <td>${b.thresholdHours}h</td>
       <td><span class="badge ${b.overageHours > b.thresholdHours ? 'sla-severe' : 'sla-mild'}">+${b.overageHours}h</span></td>
     </tr>`).join('');
+  staggerIn($('slaBody'), 'tr');
 }
 async function loadAlerts() {
   const office = $('officeSwitcher').value;
@@ -681,6 +740,10 @@ async function loadAlerts() {
   $('alertsChaseBody').innerHTML = chaseUp.map(j => `
     <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
     <td>${j.follow_up_date ? new Date(j.follow_up_date).toLocaleDateString() : '—'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  staggerIn($('alertsDueSoonBody'), 'tr');
+  staggerIn($('alertsOverseasBody'), 'tr');
+  staggerIn($('alertsChaseBody'), 'tr');
 
   document.querySelectorAll('#subtab-needsAttention button[data-snooze]').forEach(b => {
     b.onclick = async () => {
@@ -858,6 +921,7 @@ $('mail_sendBtn').onclick = async () => {
 function switchView(view) {
   document.querySelectorAll('.navlist [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('main > [id$="View"]').forEach(el => el.style.display = el.id === view + 'View' ? 'block' : 'none');
+  fadeIn($(view + 'View'));
   $('sidebar').classList.remove('mobile-open');
   VIEWS[view]?.onEnter?.();
 }
@@ -877,7 +941,9 @@ document.querySelectorAll('.subtab-btn').forEach(btn => {
     scope.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
     scope.querySelectorAll('.subtabpane').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    scope.querySelector('#subtab-' + btn.dataset.subtab).classList.add('active');
+    const pane = scope.querySelector('#subtab-' + btn.dataset.subtab);
+    pane.classList.add('active');
+    fadeIn(pane);
     SUBTAB_ENTER[btn.dataset.subtab]?.();
   };
 });
@@ -914,6 +980,7 @@ async function loadJobs() {
   if (office) params.set('office', office);
   if (status) params.set('status', status);
   if (search) params.set('search', search);
+  $('jobsBody').innerHTML = `<tr class="loading-row"><td colspan="8">Loading jobs…</td></tr>`;
   const { jobs } = await api(`/jobs?${params.toString()}`);
   JOBS = jobs;
   try {
@@ -944,6 +1011,7 @@ function renderJobs() {
   body.querySelectorAll('input[data-select]').forEach(cb => {
     cb.onchange = () => { cb.checked ? SELECTED_JOB_IDS.add(cb.dataset.select) : SELECTED_JOB_IDS.delete(cb.dataset.select); };
   });
+  staggerIn(body, 'tr.job-row');
 }
 $('searchInput').addEventListener('input', debounce(loadJobs, 350));
 $('statusFilter').onchange = loadJobs;
@@ -966,9 +1034,9 @@ async function changeStatus(jobId, statusCode, selEl) {
 // ---- Batch Assay ----
 $('batchAssayBtn').onclick = () => {
   if (!SELECTED_JOB_IDS.size) { toast('Select one or more jobs first (tick the checkboxes).'); return; }
-  $('batchAssayOverlay').classList.add('open');
+  openSheet($('batchAssayOverlay'));
 };
-$('cancelBatchAssay').onclick = () => $('batchAssayOverlay').classList.remove('open');
+$('cancelBatchAssay').onclick = () => closeSheet($('batchAssayOverlay'));
 $('saveBatchAssay').onclick = async () => {
   try {
     const result = await api('/jobs/assay/batch', { method: 'POST', body: JSON.stringify({
@@ -977,7 +1045,7 @@ $('saveBatchAssay').onclick = async () => {
       assayDateSent: $('ba_dateSent').value || null,
     })});
     toast(`Saved to ${result.updated.length} job(s).`);
-    $('batchAssayOverlay').classList.remove('open');
+    await closeSheet($('batchAssayOverlay'));
     SELECTED_JOB_IDS.clear();
     ['ba_officeName','ba_invoiceNo','ba_dateSent'].forEach(id => $(id).value = '');
     await loadJobs();
@@ -985,8 +1053,8 @@ $('saveBatchAssay').onclick = async () => {
 };
 
 // ---- New job ----
-$('newJobBtn').onclick = () => $('newJobOverlay').classList.add('open');
-$('cancelNewJob').onclick = () => $('newJobOverlay').classList.remove('open');
+$('newJobBtn').onclick = () => openSheet($('newJobOverlay'));
+$('cancelNewJob').onclick = () => closeSheet($('newJobOverlay'));
 $('saveNewJob').onclick = async () => {
   const jobName = $('f_jobName').value.trim();
   if (!jobName) { toast('Job name is required.'); return; }
@@ -996,7 +1064,7 @@ $('saveNewJob').onclick = async () => {
       priority: $('f_priority').value, clientDeliveryDate: $('f_deliveryDate').value || null,
       poNumber: $('f_po').value.trim(), clientStoneSemiMount: $('f_semiMount').checked, notes: $('f_notes').value.trim(),
     })});
-    $('newJobOverlay').classList.remove('open');
+    await closeSheet($('newJobOverlay'));
     ['f_jobName','f_contact','f_phone','f_po','f_notes','f_deliveryDate'].forEach(id => $(id).value = '');
     $('f_semiMount').checked = false;
     toast('Job created.'); await loadJobs();
@@ -1009,7 +1077,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tabpane').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    $('tab-' + btn.dataset.tab).classList.add('active');
+    const pane = $('tab-' + btn.dataset.tab);
+    pane.classList.add('active');
+    fadeIn(pane);
   };
 });
 
@@ -1026,7 +1096,7 @@ async function openJobDetail(jobId) {
   $('d_notes').value = job?.notes || '';
   $('d_clientComment').value = '';
   $('d_followUpDate').value = job?.follow_up_date ? job.follow_up_date.slice(0,10) : '';
-  $('jobDetailOverlay').classList.add('open');
+  openSheet($('jobDetailOverlay'));
   const tasks = [loadHistory(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId)];
   if (USER.officeHasAssay) tasks.push(loadAssayTab(jobId));
   await Promise.all(tasks);
@@ -1039,7 +1109,7 @@ document.querySelectorAll('button[data-days]').forEach(btn => {
   };
 });
 $('clearFollowUp').onclick = () => { $('d_followUpDate').value = ''; };
-$('closeDetail').onclick = () => { $('jobDetailOverlay').classList.remove('open'); loadJobs(); };
+$('closeDetail').onclick = async () => { await closeSheet($('jobDetailOverlay')); loadJobs(); };
 
 // ---- WhatsApp share ----
 $('whatsappShareBtn').onclick = () => {
@@ -1113,6 +1183,7 @@ async function loadChat(jobId) {
       <div>${escapeHtml(m.body || '')}</div>
       ${m.image_url ? `<img src="${m.image_url}" style="max-width:160px;border-radius:6px;margin-top:4px">` : ''}
     </div>`).join('') || '<p class="meta">No messages yet.</p>';
+  staggerIn($('chatThread'), '.chat-msg');
   $('chatThread').scrollTop = $('chatThread').scrollHeight;
 }
 $('chatSendBtn').onclick = async () => {
@@ -1279,16 +1350,16 @@ async function loadStaff() {
 $('newStaffBtn').onclick = () => {
   $('s_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
   $('s_admin_row').style.display = USER.isGlobalAdmin ? 'flex' : 'none'; // only a global admin can grant global admin
-  $('staffOverlay').classList.add('open');
+  openSheet($('staffOverlay'));
 };
-$('cancelStaff').onclick = () => $('staffOverlay').classList.remove('open');
+$('cancelStaff').onclick = () => closeSheet($('staffOverlay'));
 $('saveStaff').onclick = async () => {
   try {
     await api('/users', { method: 'POST', body: JSON.stringify({
       displayName: $('s_name').value.trim(), email: $('s_email').value.trim(), password: $('s_password').value,
       officeCode: $('s_office').value, isGlobalAdmin: $('s_admin').checked, isOrgAdmin: $('s_orgAdmin').checked, isOfficeMaster: $('s_master').checked,
     })});
-    $('staffOverlay').classList.remove('open');
+    await closeSheet($('staffOverlay'));
     ['s_name','s_email','s_password'].forEach(id => $(id).value = '');
     $('s_admin').checked = false; $('s_orgAdmin').checked = false; $('s_master').checked = false;
     toast('Staff added.'); await loadStaff();
@@ -1318,9 +1389,9 @@ async function loadInvites() {
 }
 $('newInviteBtn').onclick = () => {
   $('inv_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
-  $('inviteOverlay').classList.add('open');
+  openSheet($('inviteOverlay'));
 };
-$('cancelInvite').onclick = () => $('inviteOverlay').classList.remove('open');
+$('cancelInvite').onclick = () => closeSheet($('inviteOverlay'));
 $('saveInvite').onclick = async () => {
   try {
     await api('/invite-codes', { method: 'POST', body: JSON.stringify({
@@ -1329,7 +1400,7 @@ $('saveInvite').onclick = async () => {
       expiresAt: $('inv_expires').value ? new Date($('inv_expires').value).toISOString() : undefined,
       isOfficeMaster: $('inv_master').checked, isOrgAdmin: $('inv_orgAdmin').checked,
     })});
-    $('inviteOverlay').classList.remove('open');
+    await closeSheet($('inviteOverlay'));
     ['inv_code','inv_maxUses','inv_expires'].forEach(id => $(id).value = '');
     $('inv_master').checked = false; $('inv_orgAdmin').checked = false;
     toast('Invite created.'); await loadInvites();
@@ -1349,14 +1420,15 @@ async function loadOfficeChat() {
         <div class="meta">${escapeHtml(m.sender_display_name || m.sender_name || 'Someone')} · ${new Date(m.created_at).toLocaleString()}</div>
         <div>${escapeHtml(m.body || '')}</div>
       </div>`).join('') || '<p class="meta">No messages yet — say hi.</p>';
+    staggerIn($('officeChatThread'), '.chat-msg');
     $('officeChatThread').scrollTop = $('officeChatThread').scrollHeight;
   } catch (e) { toast(e.message); }
 }
 $('officeChatFab').onclick = () => {
-  $('officeChatPanel').classList.add('open');
+  openChatPanel($('officeChatPanel'));
   loadOfficeChat();
 };
-$('closeOfficeChat').onclick = () => $('officeChatPanel').classList.remove('open');
+$('closeOfficeChat').onclick = () => closeChatPanel($('officeChatPanel'));
 $('officeChatSendBtn').onclick = async () => {
   const body = $('officeChatInput').value.trim();
   if (!body) return;
