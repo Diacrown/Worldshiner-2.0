@@ -41,3 +41,7 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         sync: false   # must exactly match the redirect URI registered in Google Cloud Console
+      # Google sign-in is also optional and separate from the Gmail client
+      # above — leave unset and the frontend just hides the Google button.
+      - key: GOOGLE_SIGNIN_CLIENT_ID
+        sync: false

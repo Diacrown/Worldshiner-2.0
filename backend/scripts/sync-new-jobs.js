@@ -1,17 +1,19 @@
-// One-time historical data migration: reads the Firestore exports
-// (jobs_v2.json, jobs_v2_uk.json — produced by export-firestore.js) and
-// loads every real job, with its production spec, design entries, client
-// items, images, setter/polisher/repairer records, chat, and reconstructed
-// status history (from the old ts* timestamp fields), into Postgres.
+// Incremental sync: imports only jobs not already present (matched by
+// source_ref = Firestore doc ID), so it's safe to re-run repeatedly as the
+// old system keeps accumulating real activity while both systems are in
+// use side by side.
 //
-// Usage:
-//   DATABASE_URL=<target> node scripts/migrate-historical-jobs.js [--dry-run]
+// Requires backfill-source-ref.js to have been run first so jobs from the
+// original migrate-historical-jobs.js run have source_ref populated —
+// otherwise every existing job looks "new" here and would be duplicated.
 //
-// This was the original one-shot import (already run against production).
-// For catching up on jobs created in the old system since then, use
-// sync-new-jobs.js instead — it's safe to re-run repeatedly, this is not:
-// jobs with no PO number can't be deduped, so running this twice against
-// the same target duplicates every PO-less job.
+// This only inserts jobs that don't exist yet. It does NOT update the
+// status/notes/etc. of jobs that were already migrated, even if they
+// changed in the old system since — that's a separate "reconcile changes"
+// problem this deliberately doesn't attempt, since blindly overwriting
+// could clobber anything already edited in the new system.
+//
+// Usage: DATABASE_URL=<target> node scripts/sync-new-jobs.js
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +23,6 @@ import { makeStatusResolvers, insertJob } from './lib/job-import.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXPORT_DIR = path.join(__dirname, '..', '..', 'firestore-export');
-const DRY_RUN = process.argv.includes('--dry-run');
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -35,12 +36,18 @@ async function main() {
   const officeCodeToId = new Map(officeRes.rows.map((r) => [r.code, r.id]));
   const { resolveBranchStatus, resolveHqStatus } = makeStatusResolvers(branchLabelToCode, hqLabelToCode);
 
+  // One bulk fetch instead of one SELECT per doc — cheap in-memory lookups
+  // for what's already synced rather than thousands of network round trips.
+  const { rows: existingRefs } = await pool.query('SELECT source_ref FROM jobs WHERE source_ref IS NOT NULL');
+  const knownRefs = new Set(existingRefs.map((r) => r.source_ref));
+  console.log(`Loaded ${knownRefs.size} already-synced source_ref(s).`);
+
   const files = [
     { path: path.join(EXPORT_DIR, 'jobs_v2.json'), source: 'jobs_v2' },
     { path: path.join(EXPORT_DIR, 'jobs_v2_uk.json'), source: 'jobs_v2_uk' },
   ];
 
-  const summary = { imported: 0, skippedDuplicate: 0, errored: 0, unmappedBranchStatus: new Set(), unmappedHqStatus: new Set(), errors: [] };
+  const summary = { imported: 0, alreadySynced: 0, errored: 0, unmappedBranchStatus: new Set(), unmappedHqStatus: new Set(), errors: [] };
 
   for (const file of files) {
     if (!fs.existsSync(file.path)) { console.log(`Skipping ${file.source} — file not found`); continue; }
@@ -58,52 +65,42 @@ async function main() {
 
     for (const [officeCode, entries] of Object.entries(byOffice)) {
       const officeId = officeCodeToId.get(officeCode);
-      let batchId = null;
-      if (!DRY_RUN) {
-        const { rows } = await pool.query(
-          `INSERT INTO import_batches (office_id, filename, row_count_total) VALUES ($1,$2,$3) RETURNING id`,
-          [officeId, file.source, entries.length]
-        );
-        batchId = rows[0].id;
-      }
+      const newEntries = entries.filter(([id]) => !knownRefs.has(id));
+      summary.alreadySynced += entries.length - newEntries.length;
+      if (!newEntries.length) continue;
 
-      for (const [firestoreId, job] of entries) {
-        const client = DRY_RUN ? null : await pool.connect();
+      const { rows: batchRows } = await pool.query(
+        `INSERT INTO import_batches (office_id, filename, row_count_total) VALUES ($1,$2,$3) RETURNING id`,
+        [officeId, `${file.source}-sync-${new Date().toISOString().slice(0, 10)}`, newEntries.length]
+      );
+      const batchId = batchRows[0].id;
+
+      for (const [firestoreId, job] of newEntries) {
+        const client = await pool.connect();
         try {
-          if (!DRY_RUN) await client.query('BEGIN');
-
-          const poNumber = (job.poNumber || '').trim() || null;
-          if (poNumber && !DRY_RUN) {
-            const { rows: dupRows } = await client.query('SELECT id FROM jobs WHERE office_id = $1 AND po_number = $2', [officeId, poNumber]);
-            if (dupRows.length) { summary.skippedDuplicate++; await client.query('ROLLBACK'); continue; }
-          }
-
+          await client.query('BEGIN');
           const { code: statusCode, inAssay } = resolveBranchStatus(job.status);
           if (job.status && !statusCode) summary.unmappedBranchStatus.add(job.status);
           const hqStatusCode = resolveHqStatus(job.indiaStatus);
           if (job.indiaStatus && !hqStatusCode) summary.unmappedHqStatus.add(job.indiaStatus);
 
-          if (DRY_RUN) {
-            if (!(job.jobName || '').trim()) throw new Error('Missing jobName');
-          } else {
-            await insertJob(client, { officeId, batchId, sourceRef: firestoreId, job, statusCode, hqStatusCode, inAssay });
-            await client.query('COMMIT');
-          }
+          await insertJob(client, { officeId, batchId, sourceRef: firestoreId, job, statusCode, hqStatusCode, inAssay });
+          await client.query('COMMIT');
           summary.imported++;
         } catch (err) {
-          if (!DRY_RUN) await client.query('ROLLBACK').catch(() => {});
+          await client.query('ROLLBACK').catch(() => {});
           summary.errored++;
           summary.errors.push({ id: firestoreId, source: file.source, office: officeCode, error: err.message });
         } finally {
-          if (client) client.release();
+          client.release();
         }
       }
     }
   }
 
-  console.log(`\n${DRY_RUN ? '[DRY RUN] ' : ''}Migration summary`);
-  console.log(`  Imported: ${summary.imported}`);
-  console.log(`  Skipped (duplicate PO): ${summary.skippedDuplicate}`);
+  console.log(`\nSync summary`);
+  console.log(`  Newly imported: ${summary.imported}`);
+  console.log(`  Already synced (skipped): ${summary.alreadySynced}`);
   console.log(`  Errored: ${summary.errored}`);
   if (summary.unmappedBranchStatus.size) console.log(`  Unmapped branch status labels: ${[...summary.unmappedBranchStatus].join(', ')}`);
   if (summary.unmappedHqStatus.size) console.log(`  Unmapped HQ status labels: ${[...summary.unmappedHqStatus].join(', ')}`);

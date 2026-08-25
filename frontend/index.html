@@ -6,52 +6,62 @@
 <title>World Shiner 2.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="config.js"></script>
 <style>
   :root{
-    --bg:#f3f5f8; --s1:#ffffff; --s2:#f8f9fb; --s3:#e2e6ec;
-    --accent:#28466b; --accent2:#1b3450; --text:#1b2432; --text2:#647085;
-    --border:#e2e6ec; --green:#1e7e4e; --red:#c0392b; --orange:#b8791c;
-    --rad:6px; --sidebar-w:220px; --sidebar-w-collapsed:64px;
+    --bg:oklch(0.955 0.02 60); --s1:oklch(0.99 0.006 70); --s2:oklch(0.945 0.022 58); --s3:oklch(0.83 0.025 60);
+    --gold:oklch(0.68 0.14 80); --gold-dark:oklch(0.48 0.11 75); --onGold:#2b1a06;
+    --gold-bg:oklch(0.92 0.06 78); --emerald-bg:oklch(0.9 0.05 155); --burgundy-bg:oklch(0.9 0.06 16);
+    --sidebar-bg:oklch(0.24 0.05 20); --sidebar-ink:oklch(0.85 0.03 55);
+    --accent:var(--gold-dark); --accent2:oklch(0.4 0.1 72);
+    --text:oklch(0.2 0.02 35); --text2:oklch(0.46 0.024 40);
+    --border:oklch(0.83 0.025 60); --green:oklch(0.4 0.1 155); --red:oklch(0.37 0.14 16); --orange:var(--gold-dark);
+    --rad:8px; --sidebar-w:220px; --sidebar-w-collapsed:64px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
-  h1,h2,.brand{font-family:'Inter',system-ui,sans-serif;font-weight:700}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',system-ui,sans-serif;min-height:100vh}
+  h1,h2,.brand{font-family:'Playfair Display',georgia,serif;font-weight:600}
   button{font-family:inherit;cursor:pointer;border:0;border-radius:var(--rad);padding:9px 16px;font-size:14px;font-weight:600}
   button:disabled{opacity:.5;cursor:not-allowed}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-primary:hover{background:var(--accent2)}
+  .btn-primary{background:linear-gradient(90deg,var(--gold-dark),var(--gold));color:var(--onGold)}
+  .btn-primary:hover{background:var(--gold-dark);color:#fff}
   .btn-ghost{background:var(--s3);color:var(--text)}
-  .btn-ghost:hover{background:#ddd0cc}
+  .btn-ghost:hover{background:oklch(0.78 0.03 60)}
   .btn-sm{padding:5px 10px;font-size:12px}
-  .btn-danger{background:#f8d9d3;color:var(--red)}
+  .btn-danger{background:var(--burgundy-bg);color:var(--red)}
   input,select,textarea{font-family:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--rad);background:var(--s2);width:100%}
   label{font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px}
 
   #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center}
-  .login-card{background:var(--s1);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:36px;width:100%;max-width:360px}
-  .login-card h1{font-size:22px;color:var(--accent);margin-bottom:2px}
-  .login-card p{font-size:13px;color:var(--text2);margin-bottom:20px}
+  .login-card{background:var(--s1);border-radius:14px;box-shadow:0 20px 50px rgba(40,20,10,.18);padding:40px 36px 36px;width:100%;max-width:360px;position:relative;overflow:hidden}
+  .login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,var(--gold-dark),var(--gold),var(--gold-dark))}
+  .login-card h1{font-size:26px;color:var(--text);margin-bottom:2px;letter-spacing:.01em}
+  .login-card p{font-size:13px;color:var(--text2);margin-bottom:22px}
   .login-card .field{margin-bottom:12px}
   .login-card button{width:100%;margin-top:6px}
   .err{color:var(--red);font-size:13px;margin-top:10px}
+  .auth-divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--text2);font-size:12px}
+  .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+  .auth-toggle{font-size:13px;color:var(--text2);text-align:center;margin-top:16px}
+  .auth-toggle a{color:var(--accent);font-weight:600;text-decoration:none}
+  .auth-toggle a:hover{text-decoration:underline}
 
   #app{display:none}
   .app-shell{display:flex;min-height:100vh}
-  .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--accent);color:#fff;display:flex;flex-direction:column;transition:width .15s ease,transform .2s cubic-bezier(.16,1,.3,1)}
+  .sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--sidebar-bg);color:var(--sidebar-ink);display:flex;flex-direction:column;transition:width .15s ease,transform .2s cubic-bezier(.16,1,.3,1)}
   .sidebar.collapsed{width:var(--sidebar-w-collapsed)}
   .sidebar-brand{display:flex;align-items:center;justify-content:space-between;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.12)}
-  .sidebar-brand .brand{font-size:16px;color:#fff;white-space:nowrap;overflow:hidden}
+  .sidebar-brand .brand{font-size:17px;color:var(--gold);white-space:nowrap;overflow:hidden}
   .sidebar.collapsed .sidebar-brand .brand{display:none}
-  .sidebar-brand button{background:none;color:#fff;padding:4px 8px;font-size:16px}
+  .sidebar-brand button{background:none;color:var(--sidebar-ink);padding:4px 8px;font-size:16px}
   .navlist{display:flex;flex-direction:column;padding:10px;gap:2px}
-  .nav-item{display:flex;align-items:center;gap:10px;background:none;color:rgba(255,255,255,.78);text-align:left;padding:10px 12px;border-radius:var(--rad);font-weight:500;white-space:nowrap;overflow:hidden;transition:background .12s ease,color .12s ease}
+  .nav-item{display:flex;align-items:center;gap:10px;background:none;color:var(--sidebar-ink);text-align:left;padding:10px 12px;border-radius:var(--rad);font-weight:500;white-space:nowrap;overflow:hidden;border-left:2px solid transparent;transition:background .12s ease,color .12s ease}
   .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
-  .nav-item.active{background:rgba(255,255,255,.16);color:#fff}
+  .nav-item.active{background:none;color:var(--gold);border-left-color:var(--gold);font-weight:600}
   .sidebar.collapsed .nav-item span{display:none}
   .main-wrap{flex:1;min-width:0;display:flex;flex-direction:column}
-  .topbar{background:var(--s1);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:14px}
+  .topbar{background:var(--s1);border-bottom:2px solid var(--gold);padding:12px 24px;display:flex;align-items:center;gap:14px}
   .topbar .who{font-size:12px;color:var(--text2);margin-left:auto}
   .topbar select{width:auto;max-width:180px}
   main{padding:24px;max-width:1200px;width:100%;margin:0 auto}
@@ -68,47 +78,48 @@
     table{display:block;overflow-x:auto;white-space:nowrap}
   }
 
-  table{width:100%;border-collapse:collapse;background:var(--s1);border-radius:var(--rad);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)}
-  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--s3)}
-  th{background:var(--s2);color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+  table{width:100%;border-collapse:collapse;background:var(--s1);border-radius:var(--rad);overflow:hidden;box-shadow:0 6px 20px rgba(40,20,10,.08)}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--border)}
+  th{background:var(--s2);color:var(--gold-dark);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;border-bottom:2px solid var(--gold)}
   tr:last-child td{border-bottom:0}
   tr.job-row{cursor:pointer;transition:background .12s ease}
   tr.job-row:hover{background:var(--s2)}
-  .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
-  .badge.High{background:#f8d9d3;color:var(--red)}
-  .badge.Medium{background:#f5e6cc;color:var(--orange)}
-  .badge.Low{background:#dde8d8;color:var(--green)}
-  .badge.open{background:#f8d9d3;color:var(--red)}
-  .badge.resolved{background:#dde8d8;color:var(--green)}
-  .badge.sla-mild{background:#f5e6cc;color:var(--orange)}
-  .badge.sla-severe{background:#f8d9d3;color:var(--red)}
+  .badge{font-size:11px;padding:2px 9px;border-radius:6px;font-weight:700;border:1px solid transparent}
+  .badge.High{background:var(--burgundy-bg);color:var(--red);border-color:var(--red)}
+  .badge.Medium{background:var(--gold-bg);color:var(--orange);border-color:var(--orange)}
+  .badge.Low{background:var(--emerald-bg);color:var(--green);border-color:var(--green)}
+  .badge.open{background:var(--burgundy-bg);color:var(--red);border-color:var(--red)}
+  .badge.resolved{background:var(--emerald-bg);color:var(--green);border-color:var(--green)}
+  .badge.sla-mild{background:var(--gold-bg);color:var(--orange);border-color:var(--orange)}
+  .badge.sla-severe{background:var(--burgundy-bg);color:var(--red);border-color:var(--red)}
   .unread-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px}
   select.status-inline{font-size:12px;padding:4px 6px;border-radius:8px}
   .empty{padding:40px;text-align:center;color:var(--text2)}
 
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;z-index:50}
+  .overlay{position:fixed;inset:0;background:rgba(30,15,10,.42);display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;z-index:50}
   .overlay.open{display:flex}
-  .sheet{background:var(--s1);border-radius:14px;padding:24px;width:100%;max-width:560px}
+  .sheet{background:var(--s1);border-radius:12px;padding:34px 24px 24px;width:100%;max-width:560px;position:relative;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.2)}
+  .sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,var(--gold-dark),var(--gold),var(--gold-dark))}
   .sheet.wide{max-width:680px}
-  .sheet h2{font-size:17px;color:var(--accent);margin-bottom:16px}
+  .sheet h2{font-size:19px;color:var(--text);margin-bottom:16px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .grid2 .full{grid-column:1/-1}
   .sheet .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
   .checkline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
   .checkline input{width:auto}
 
-  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--s3);margin:16px 0}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:16px 0;flex-wrap:wrap}
   .tabs button{background:none;border-radius:0;padding:8px 12px;font-size:13px;color:var(--text2);border-bottom:2px solid transparent}
-  .tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--gold);font-weight:700}
   .tabpane{display:none}
   .tabpane.active{display:block}
 
-  .history-item,.issue-item{padding:10px 0;border-bottom:1px solid var(--s3);font-size:13px}
+  .history-item,.issue-item{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
   .history-item:last-child,.issue-item:last-child{border-bottom:0}
   .meta{color:var(--text2);font-size:11px}
   .issue-item .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 
-  .chat-thread{max-height:280px;overflow-y:auto;border:1px solid var(--s3);border-radius:var(--rad);padding:10px;margin-bottom:10px;background:var(--s2)}
+  .chat-thread{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--rad);padding:10px;margin-bottom:10px;background:var(--s2)}
   .chat-msg{margin-bottom:10px;font-size:13px}
   .chat-msg .meta{margin-bottom:2px}
   .chat-send{display:flex;gap:8px}
@@ -123,32 +134,32 @@
 
   /* Section header + sub-tabs (SLA/Alerts) */
   .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-  .section-head h2{font-size:18px;color:var(--text)}
+  .section-head h2{font-size:19px;color:var(--text)}
   .section-head p{font-size:13px;color:var(--text2);margin-top:2px}
   .subtabs{display:flex;gap:4px;margin-bottom:16px;background:var(--s2);padding:4px;border-radius:var(--rad);width:fit-content}
   .subtabs button{background:none;color:var(--text2);padding:7px 14px;font-size:13px;border-radius:4px}
-  .subtabs button.active{background:var(--s1);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .subtabs button.active{background:var(--s1);color:var(--gold-dark);box-shadow:0 1px 3px rgba(0,0,0,.08)}
   .subtabpane{display:none}
   .subtabpane.active{display:block}
   .stat-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-  .stat-card{background:var(--s1);border-radius:var(--rad);padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,.04);min-width:120px}
-  .stat-card .num{font-size:22px;font-weight:700;color:var(--accent)}
+  .stat-card{background:var(--s1);border-radius:var(--rad);padding:14px 18px;box-shadow:0 4px 14px rgba(40,20,10,.08);min-width:120px}
+  .stat-card .num{font-size:22px;font-weight:700;color:var(--gold-dark);font-family:'Playfair Display',georgia,serif}
   .stat-card .lbl{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.03em}
 
   /* Floating office chat */
-  .chat-fab{position:fixed;bottom:22px;right:22px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:60;display:flex;align-items:center;justify-content:center;padding:0}
-  .chat-fab:hover{background:var(--accent2)}
-  .chat-panel{position:fixed;bottom:88px;right:22px;width:340px;max-width:calc(100vw - 32px);background:var(--s1);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:60;display:none;flex-direction:column;overflow:hidden}
+  .chat-fab{position:fixed;bottom:22px;right:22px;width:52px;height:52px;border-radius:50%;background:linear-gradient(90deg,var(--gold-dark),var(--gold));color:var(--onGold);font-size:22px;box-shadow:0 8px 20px rgba(40,20,10,.3);z-index:60;display:flex;align-items:center;justify-content:center;padding:0}
+  .chat-fab:hover{background:var(--gold-dark);color:#fff}
+  .chat-panel{position:fixed;bottom:88px;right:22px;width:340px;max-width:calc(100vw - 32px);background:var(--s1);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.22);z-index:60;display:none;flex-direction:column;overflow:hidden}
   .chat-panel.open{display:flex}
-  .chat-panel-head{background:var(--accent);color:#fff;padding:12px 16px;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
-  .chat-panel-head button{background:none;color:#fff;padding:2px 6px}
+  .chat-panel-head{background:var(--sidebar-bg);color:var(--gold);padding:12px 16px;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .chat-panel-head button{background:none;color:var(--gold);padding:2px 6px}
   .chat-panel .chat-thread{max-height:320px;margin:10px;border-radius:8px}
   .chat-panel .chat-send{margin:0 10px 10px}
 
   /* Loading skeleton for tables while a request is in flight */
   .loading-row td{color:var(--text2);font-style:italic;text-align:center;padding:24px}
-  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
-  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--gold-dark);outline-offset:1px}
+  button:focus-visible{outline:2px solid var(--gold-dark);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -156,25 +167,45 @@
 <div id="loginScreen">
   <div class="login-card">
     <h1>World Shiner</h1>
-    <p>Sign in to your office's job tracker.</p>
-    <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@worldshiner.com"></div>
-    <div class="field"><label>Password</label><input id="loginPassword" type="password"></div>
-    <button class="btn-primary" id="loginBtn">Sign in</button>
+    <p id="authSubtitle">Sign in to your office's job tracker.</p>
+
+    <div id="signInFields">
+      <div class="field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@worldshiner.com"></div>
+      <div class="field"><label>Password</label><input id="loginPassword" type="password"></div>
+      <button class="btn-primary" id="loginBtn">Sign in</button>
+      <div class="auth-divider" id="googleDividerSignin" style="display:none"><span>or</span></div>
+      <div id="googleBtnContainer" style="margin-top:4px"></div>
+    </div>
+
+    <div id="signUpFields" style="display:none">
+      <div class="field"><label>Invite code</label><input id="su_inviteCode" placeholder="e.g. TX7K-9QRM"></div>
+      <div class="field"><label>Full name</label><input id="su_displayName"></div>
+      <div class="field"><label>Email</label><input id="su_email" type="email"></div>
+      <div class="field"><label>Password</label><input id="su_password" type="password"></div>
+      <div class="field"><label>Confirm password</label><input id="su_password2" type="password"></div>
+      <button class="btn-primary" id="signupBtn">Create account</button>
+      <div class="auth-divider" id="googleDividerSignup" style="display:none"><span>or</span></div>
+      <div id="googleBtnContainerSignup" style="margin-top:4px"></div>
+    </div>
+
     <div class="err" id="loginErr"></div>
+
+    <p class="auth-toggle" id="toSignUp">New here? <a href="#" id="toSignUpLink">Sign up with an invite code</a></p>
+    <p class="auth-toggle" id="toSignIn" style="display:none">Already have an account? <a href="#" id="toSignInLink">Sign in</a></p>
   </div>
 </div>
 
 <div id="app">
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand"><span class="brand">💎 World Shiner</span><button id="sidebarToggle" title="Collapse">☰</button></div>
+      <div class="sidebar-brand"><span class="brand">World Shiner</span><button id="sidebarToggle" title="Collapse">☰</button></div>
       <nav class="navlist">
-        <button data-view="jobs" class="nav-item active">📋 <span>Jobs</span></button>
-        <button data-view="sla" class="nav-item" style="display:none">⏱ <span>Alerts</span></button>
-        <button data-view="reports" class="nav-item" style="display:none">📊 <span>Reports</span></button>
-        <button data-view="staff" class="nav-item" style="display:none">👥 <span>Staff</span></button>
-        <button data-view="import" class="nav-item" style="display:none">📥 <span>Import</span></button>
-        <button data-view="mail" class="nav-item" style="display:none">✉️ <span>Mail</span></button>
+        <button data-view="jobs" class="nav-item active"><span>Jobs</span></button>
+        <button data-view="sla" class="nav-item" style="display:none"><span>Alerts</span></button>
+        <button data-view="reports" class="nav-item" style="display:none"><span>Reports</span></button>
+        <button data-view="staff" class="nav-item" style="display:none"><span>Staff</span></button>
+        <button data-view="import" class="nav-item" style="display:none"><span>Import</span></button>
+        <button data-view="mail" class="nav-item" style="display:none"><span>Mail</span></button>
       </nav>
     </aside>
     <div class="main-wrap">
@@ -182,6 +213,7 @@
         <button class="mobile-nav-toggle" id="mobileNavToggle">☰</button>
         <select id="officeSwitcher" style="display:none"></select>
         <span class="who" id="whoAmI"></span>
+        <button class="btn-ghost btn-sm" id="changePasswordBtn" style="margin-right:6px">Change Password</button>
         <button class="btn-ghost" id="signOutBtn">Sign out</button>
       </div>
       <main>
@@ -191,7 +223,7 @@
             <input type="text" id="searchInput" placeholder="Search job name, contact, PO…">
             <select id="statusFilter"><option value="">All statuses</option></select>
             <span class="spacer"></span>
-            <button class="btn-ghost" id="batchAssayBtn" style="display:none">⚖ Batch Assay</button>
+            <button class="btn-ghost" id="batchAssayBtn" style="display:none">Batch Assay</button>
             <button class="btn-primary" id="newJobBtn">+ New Job</button>
           </div>
           <table id="jobsTable">
@@ -389,7 +421,7 @@
   <div class="sheet wide">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <h2 id="detailTitle">Job</h2>
-      <button class="btn-ghost btn-sm" id="whatsappShareBtn">📱 Share via WhatsApp</button>
+      <button class="btn-ghost btn-sm" id="whatsappShareBtn">Share via WhatsApp</button>
     </div>
     <div class="grid2">
       <div><label>Contact Person</label><input id="d_contact"></div>
@@ -549,10 +581,26 @@
   </div>
 </div>
 
+<!-- Change / set password -->
+<div class="overlay" id="changePasswordOverlay">
+  <div class="sheet">
+    <h2>Change Password</h2>
+    <div class="grid2">
+      <div class="full" id="cp_currentField"><label>Current password</label><input id="cp_current" type="password"></div>
+      <div class="full"><label>New password</label><input id="cp_new" type="password"></div>
+      <div class="full"><label>Confirm new password</label><input id="cp_confirm" type="password"></div>
+    </div>
+    <div class="actions">
+      <button class="btn-ghost" id="cancelChangePassword">Cancel</button>
+      <button class="btn-primary" id="saveChangePassword">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- Office chat (floating) -->
-<button class="chat-fab" id="officeChatFab" title="Office chat" style="display:none">💬</button>
+<button class="chat-fab" id="officeChatFab" title="Office chat" style="display:none"></button>
 <div class="chat-panel" id="officeChatPanel">
   <div class="chat-panel-head"><span id="officeChatTitle">Office Chat</span><button id="closeOfficeChat">✕</button></div>
   <div class="chat-thread" id="officeChatThread"></div>
@@ -667,6 +715,102 @@ $('signOutBtn').onclick = () => {
   localStorage.removeItem('ws2_token'); localStorage.removeItem('ws2_user');
   $('app').style.display = 'none'; $('loginScreen').style.display = 'flex';
   $('officeChatFab').style.display = 'none'; $('officeChatPanel').classList.remove('open');
+};
+
+// ---- Sign up (invite-code gated — never open registration; see backend/src/routes/auth.routes.js) ----
+let AUTH_MODE = 'signin';
+function setAuthMode(mode) {
+  AUTH_MODE = mode;
+  $('signInFields').style.display = mode === 'signin' ? 'block' : 'none';
+  $('signUpFields').style.display = mode === 'signup' ? 'block' : 'none';
+  $('toSignUp').style.display = mode === 'signin' ? 'block' : 'none';
+  $('toSignIn').style.display = mode === 'signup' ? 'block' : 'none';
+  $('authSubtitle').textContent = mode === 'signin' ? "Sign in to your office's job tracker." : 'Create an account with your office invite code.';
+  $('loginErr').textContent = '';
+}
+$('toSignUpLink').onclick = (e) => { e.preventDefault(); setAuthMode('signup'); };
+$('toSignInLink').onclick = (e) => { e.preventDefault(); setAuthMode('signin'); };
+
+$('signupBtn').onclick = async () => {
+  $('loginErr').textContent = '';
+  const inviteCode = $('su_inviteCode').value.trim();
+  const displayName = $('su_displayName').value.trim();
+  const email = $('su_email').value.trim();
+  const password = $('su_password').value;
+  if (!inviteCode || !displayName || !email || !password) { $('loginErr').textContent = 'Fill in all fields.'; return; }
+  if (password !== $('su_password2').value) { $('loginErr').textContent = 'Passwords do not match.'; return; }
+  try {
+    const { token, user } = await api('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, displayName, inviteCode }) });
+    TOKEN = token; USER = user;
+    localStorage.setItem('ws2_token', token); localStorage.setItem('ws2_user', JSON.stringify(user));
+    showApp();
+  } catch (e) { $('loginErr').textContent = e.message; }
+};
+
+// ---- Google sign-in / sign-up ----
+// Entirely optional — /auth/google-config reports { enabled: false } until
+// GOOGLE_SIGNIN_CLIENT_ID is set on the backend, in which case the buttons
+// below just never appear and nothing else about the login screen changes.
+async function handleGoogleCredential(response) {
+  $('loginErr').textContent = '';
+  try {
+    if (AUTH_MODE === 'signup') {
+      const inviteCode = $('su_inviteCode').value.trim();
+      if (!inviteCode) { $('loginErr').textContent = 'Enter your invite code above, then click Continue with Google again.'; return; }
+      const { token, user } = await api('/auth/google-signup', { method: 'POST', body: JSON.stringify({
+        idToken: response.credential, inviteCode, displayName: $('su_displayName').value.trim() || undefined,
+      })});
+      TOKEN = token; USER = user;
+      localStorage.setItem('ws2_token', token); localStorage.setItem('ws2_user', JSON.stringify(user));
+      showApp();
+    } else {
+      const { token, user } = await api('/auth/google-login', { method: 'POST', body: JSON.stringify({ idToken: response.credential }) });
+      TOKEN = token; USER = user;
+      localStorage.setItem('ws2_token', token); localStorage.setItem('ws2_user', JSON.stringify(user));
+      showApp();
+    }
+  } catch (e) { $('loginErr').textContent = e.message; }
+}
+function initGoogleSignIn(clientId) {
+  const script = document.createElement('script');
+  script.src = 'https://accounts.google.com/gsi/client';
+  script.async = true;
+  script.onload = () => {
+    google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential });
+    google.accounts.id.renderButton($('googleBtnContainer'), { theme: 'outline', size: 'large', width: 300, text: 'signin_with' });
+    google.accounts.id.renderButton($('googleBtnContainerSignup'), { theme: 'outline', size: 'large', width: 300, text: 'signup_with' });
+    $('googleDividerSignin').style.display = 'flex';
+    $('googleDividerSignup').style.display = 'flex';
+  };
+  document.head.appendChild(script);
+}
+(async () => {
+  try {
+    const { enabled, clientId } = await api('/auth/google-config');
+    if (enabled && clientId) initGoogleSignIn(clientId);
+  } catch (e) { /* Google sign-in just stays hidden */ }
+})();
+
+// ---- Change / set password ----
+$('changePasswordBtn').onclick = () => {
+  $('cp_currentField').style.display = USER.hasPassword ? 'block' : 'none';
+  $('cp_current').value = ''; $('cp_new').value = ''; $('cp_confirm').value = '';
+  openSheet($('changePasswordOverlay'));
+};
+$('cancelChangePassword').onclick = () => closeSheet($('changePasswordOverlay'));
+$('saveChangePassword').onclick = async () => {
+  const newPassword = $('cp_new').value;
+  if (newPassword !== $('cp_confirm').value) { toast('New passwords do not match.'); return; }
+  if (newPassword.length < 8) { toast('New password must be at least 8 characters.'); return; }
+  try {
+    await api('/auth/password', { method: 'PATCH', body: JSON.stringify({
+      currentPassword: USER.hasPassword ? $('cp_current').value : undefined, newPassword,
+    })});
+    USER.hasPassword = true;
+    localStorage.setItem('ws2_user', JSON.stringify(USER));
+    await closeSheet($('changePasswordOverlay'));
+    toast('Password updated.');
+  } catch (e) { toast(e.message); }
 };
 
 async function showApp() {
