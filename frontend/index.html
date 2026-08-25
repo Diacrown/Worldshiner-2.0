@@ -10,13 +10,13 @@
 <script src="config.js"></script>
 <style>
   :root{
-    --bg:oklch(0.955 0.02 60); --s1:oklch(0.99 0.006 70); --s2:oklch(0.945 0.022 58); --s3:oklch(0.83 0.025 60);
-    --gold:oklch(0.68 0.14 80); --gold-dark:oklch(0.48 0.11 75); --onGold:#2b1a06;
-    --gold-bg:oklch(0.92 0.06 78); --emerald-bg:oklch(0.9 0.05 155); --burgundy-bg:oklch(0.9 0.06 16);
-    --sidebar-bg:oklch(0.24 0.05 20); --sidebar-ink:oklch(0.85 0.03 55);
-    --accent:var(--gold-dark); --accent2:oklch(0.4 0.1 72);
-    --text:oklch(0.2 0.02 35); --text2:oklch(0.46 0.024 40);
-    --border:oklch(0.83 0.025 60); --green:oklch(0.4 0.1 155); --red:oklch(0.37 0.14 16); --orange:var(--gold-dark);
+    --bg:oklch(0.9 0.035 30); --s1:oklch(0.97 0.015 60); --s2:oklch(0.93 0.03 35); --s3:oklch(0.8 0.04 35);
+    --gold:oklch(0.42 0.09 35); --gold-dark:oklch(0.32 0.08 35); --onGold:#fff;
+    --gold-bg:oklch(0.85 0.07 55); --emerald-bg:oklch(0.88 0.05 130); --burgundy-bg:oklch(0.88 0.05 30);
+    --sidebar-bg:oklch(0.68 0.08 30); --sidebar-ink:oklch(0.99 0.01 60);
+    --accent:var(--gold-dark); --accent2:oklch(0.4 0.06 130);
+    --text:oklch(0.28 0.03 35); --text2:oklch(0.48 0.03 35);
+    --border:oklch(0.82 0.04 40); --green:oklch(0.4 0.06 130); --red:oklch(0.4 0.09 30); --orange:oklch(0.55 0.1 55);
     --rad:8px; --sidebar-w:220px; --sidebar-w-collapsed:64px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -315,6 +315,7 @@
         <div id="importView" style="display:none">
           <div id="imp_step1">
             <h2 style="font-size:16px;margin-bottom:12px">Import jobs from Excel/CSV</h2>
+            <p class="meta" style="margin-bottom:12px">New to this? <button class="btn-ghost btn-sm" id="imp_templateBtn" type="button">⬇ Download blank template</button> — fill it in and upload it below; the columns already match what this form expects.</p>
             <div class="grid2">
               <div><label>Target office</label><select id="imp_office"></select></div>
               <div><label>File (.csv or .xlsx)</label><input type="file" id="imp_fileInput" accept=".csv,.xlsx"></div>
@@ -993,6 +994,16 @@ function initImportView() {
   $('imp_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}</option>`).join('');
   importReset();
 }
+$('imp_templateBtn').onclick = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/import/template`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    if (!res.ok) throw new Error(`Download failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'worldshiner-import-template.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  } catch (e) { toast(e.message); }
+};
 $('imp_previewBtn').onclick = () => {
   const file = $('imp_fileInput').files[0];
   if (!file) { toast('Choose a file first.'); return; }

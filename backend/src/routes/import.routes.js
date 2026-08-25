@@ -53,6 +53,17 @@ function decodeFile(req) {
   return { buffer, filename };
 }
 
+importRouter.get('/template', async (req, res, next) => {
+  try {
+    const buf = await ImportService.buildImportTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="worldshiner-import-template.xlsx"');
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    next(err);
+  }
+});
+
 importRouter.post('/preview', async (req, res, next) => {
   try {
     const { buffer, filename } = decodeFile(req);

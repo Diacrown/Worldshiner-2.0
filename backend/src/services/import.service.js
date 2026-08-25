@@ -69,6 +69,30 @@ export function suggestFieldMapping(headers) {
   return mapping;
 }
 
+// Column headers here are deliberately the exact phrases suggestFieldMapping()
+// already recognizes (see KNOWN_FIELDS above), so a template filled in and
+// re-uploaded unmodified auto-maps every column with no manual work.
+const TEMPLATE_COLUMNS = [
+  { header: 'Job Name', example: 'PHENIX JWY - JOHN SMITH', width: 32 },
+  { header: 'Contact Person', example: 'John Smith', width: 20 },
+  { header: 'Client Phone', example: '+61 400 000 000', width: 18 },
+  { header: 'Priority', example: 'Medium', width: 12 },
+  { header: 'PO Number', example: 'PO-10234', width: 16 },
+  { header: 'Delivery Date', example: '2026-09-15', width: 16 },
+  { header: 'Design No', example: 'S1345', width: 14 },
+  { header: 'Notes', example: 'Client supplied full design brief.', width: 40 },
+];
+
+export async function buildImportTemplate() {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Jobs');
+  sheet.columns = TEMPLATE_COLUMNS.map((c) => ({ header: c.header, width: c.width }));
+  sheet.getRow(1).font = { bold: true };
+  sheet.addRow(TEMPLATE_COLUMNS.map((c) => c.example));
+  sheet.getRow(2).font = { italic: true, color: { argb: 'FF888888' } };
+  return workbook.xlsx.writeBuffer();
+}
+
 export async function parsePreview(buffer, filename) {
   const sheet = await loadWorksheet(buffer, filename);
   const allRows = sheetToRows(sheet);
