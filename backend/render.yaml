@@ -3,6 +3,7 @@ services:
     name: worldshiner2-api
     runtime: node
     plan: free
+    rootDir: backend
     buildCommand: npm install
     startCommand: npm run migrate && npm start
     # Run `npm run seed` ONCE yourself (Render dashboard -> Shell tab, or run
