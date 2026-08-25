@@ -187,6 +187,18 @@ export async function changeJobStatus(user, jobId, { newStatusCode, providedSett
       throw err;
     }
 
+    // HQ-locked statuses ("blue" in the StatusSync reference sheet): once
+    // HQ's sync has moved a job into one of these (is_system_only), the
+    // branch can't change it away manually until HQ moves it further — a
+    // global admin can still override, as an escape hatch for correcting
+    // mistakes rather than a true bypass of the rule.
+    const currentStatus = await getBranchStatus(job.status_code);
+    if (currentStatus?.is_system_only && !user.isGlobalAdmin) {
+      const err = new Error(`This job's status ("${currentStatus.label}") was set by HQ and is locked until HQ updates it further.`);
+      err.status = 423;
+      throw err;
+    }
+
     // Client's-own-stone / semi-mount guard (see settingChargeGuard.js)
     const { rows: itemRows } = await client.query(
       'SELECT count(*)::int AS n FROM job_client_items WHERE job_id = $1', [jobId]

@@ -55,14 +55,15 @@ const BRANCH_STATUSES = [
   ['render_received', 'Render Recd.', 140, false, false],
   ['render_submitted', 'Render Submitted', 150, false, false],
   ['confirm_order', 'Confirm Order', 160, false, false],
+  ['on_hold', 'On Hold', 165, false, false],
   ['production_started', 'Production Started', 170, true, false], // system-only: never manually selectable
   ['request_wax', 'Request Wax', 175, false, false],
   ['wax_in_production', 'Wax in Production', 177, true, false], // system-only
   ['wax_deliver', 'Wax Deliver', 179, false, false], // branch-only record, doesn't reach India
   ['local_production', 'Local Production', 180, false, false],
   ['in_repair', 'In Repair', 190, false, false],
-  ['job_delayed', 'Job Delayed', 200, false, false],
-  ['ready_to_ship', 'Ready to Ship', 210, false, false],
+  ['job_delayed', 'Job Delayed', 200, true, false], // system-only — HQ's QC Repair headlines here
+  ['ready_to_ship', 'Ready to Ship', 210, true, false], // system-only — HQ's QC Pass headlines here
   ['in_transit', 'In Transit', 220, false, false],
   ['shipped_india', 'Shipped - India', 230, false, false],
   ['in_setting', 'In Setting', 240, false, false],
@@ -88,6 +89,7 @@ const HQ_STATUSES = [
   ['new_render_request', 'New Render Request', 120],
   ['order_pending', 'Order Pending', 130],
   ['in_production', 'In Production', 140],
+  ['new_wax_request', 'New Wax Req.', 145],
   ['wax_requested', 'Wax Requested', 150],
   ['wax_check', 'Wax check', 160],
   ['awaiting_diamond', 'Awaiting Diamond', 170],
@@ -107,13 +109,17 @@ const HQ_STATUSES = [
 // matching the old app's behaviour for e.g. 'Render Submitted'.
 const BRANCH_TO_HQ = {
   quoting: 'new_job',
-  quote_given: 'quote_given',
+  // Deliberately NOT mapped: branch "Quote Given" is the branch quoting their
+  // own client and must leave HQ's status untouched — HQ has its own,
+  // separate "Quote Given" action on its own timeline (see StatusSync sheet).
   quote_approved: 'new_cad_requested',
   new_cad_requested: 'new_job',
   request_modification: 'cad_mod_requested',
   cad_approved: 'order_pending',
   request_render: 'new_render_request',
   confirm_order: 'order_pending',
+  request_wax: 'new_wax_request', // was missing entirely — HQ never learned a branch needed wax
+  on_hold: 'on_hold',
   not_proceeding: 'closed', // was missing entirely — India never learned a branch cancelled a job
 };
 

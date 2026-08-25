@@ -42,7 +42,7 @@ check "branch staff sees only their own office" "$TEXAS_OFFICES" "1"
 
 echo "=== 4. Status vocab seeded correctly ==="
 STATUS_COUNT=$(curl -s "$BASE/offices/statuses" -H "Authorization: Bearer $TEXAS_TOKEN" | jq '.statuses | length')
-check "34 branch statuses available" "$STATUS_COUNT" "34"
+check "35 branch statuses available" "$STATUS_COUNT" "35"
 
 echo "=== 5. Create jobs as Texas staff ==="
 JOB_A=$(curl -s -X POST "$BASE/jobs" -H "Authorization: Bearer $TEXAS_TOKEN" -H 'Content-Type: application/json' \
@@ -92,13 +92,19 @@ NORMAL=$(curl -s -X PATCH "$BASE/jobs/$JOB_A_ID/status" -H "Authorization: Beare
 NORMAL_STATUS=$(echo "$NORMAL" | jq -r .job.status_code)
 check "job A moved straight to quote_given" "$NORMAL_STATUS" "quote_given"
 
-echo "=== 12. Branch->HQ status sync wrote India's mirrored status ==="
+echo "=== 12. Branch Quote Given leaves India's status untouched (it's the branch's own client-facing action, not India's) ==="
 NORMAL_HQ=$(echo "$NORMAL" | jq -r .job.hq_status_code)
-check "job A's hq_status_code synced to quote_given" "$NORMAL_HQ" "quote_given"
+check "job A's hq_status_code left null by Quote Given" "$NORMAL_HQ" "null"
 
-echo "=== 13. Status history recorded both the create and the status change ==="
+echo "=== 12b. Branch->HQ status sync still wrote India's mirrored status for a status that IS mapped ==="
+APPROVED=$(curl -s -X PATCH "$BASE/jobs/$JOB_A_ID/status" -H "Authorization: Bearer $TEXAS_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"statusCode":"quote_approved"}')
+APPROVED_HQ=$(echo "$APPROVED" | jq -r .job.hq_status_code)
+check "job A's hq_status_code synced to new_cad_requested" "$APPROVED_HQ" "new_cad_requested"
+
+echo "=== 13. Status history recorded the create and both status changes ==="
 HIST_COUNT=$(curl -s "$BASE/jobs/$JOB_A_ID/history" -H "Authorization: Bearer $TEXAS_TOKEN" | jq '.history | length')
-check "job A has 2 history entries (created + status change)" "$HIST_COUNT" "2"
+check "job A has 3 history entries (created + quote_given + quote_approved)" "$HIST_COUNT" "3"
 
 echo "=== 14. HQ-side status change headlines back to the branch ==="
 HQ_CHANGE=$(curl -s -X PATCH "$BASE/jobs/$JOB_A_ID/hq-status" -H "Authorization: Bearer $INDIA_TOKEN" -H 'Content-Type: application/json' \
