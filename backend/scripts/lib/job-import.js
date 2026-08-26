@@ -50,6 +50,15 @@ export const TS_FIELD_TO_STATUS = {
   tsWithPolisher: 'with_polisher',
   tsInSetting: 'in_setting',
   tsShippedIndia: 'shipped_india',
+  // Real data has six more ts* fields the original map never listed —
+  // their history events were silently dropped, not "intentionally excluded"
+  // like the ones documented in docs/ARCHITECTURE.md.
+  tsAtAssay: 'in_setting',
+  tsRequestMod: 'request_modification',
+  tsWithSetter: 'with_setter',
+  tsAddlInfoNeeded: 'additional_info_needed',
+  tsLocalProduction: 'local_production',
+  tsRequestRender: 'request_render',
 };
 
 function validYmd(y, m, d) {
@@ -105,6 +114,19 @@ export function isUrl(s) {
   return typeof s === 'string' && /^https?:\/\//.test(s);
 }
 
+// job.owner / issue.flaggedBy / issue.resolvedBy are old-system staff email
+// addresses. Real accounts mostly don't exist yet, so this resolves to null
+// for almost everything today — that's expected, not a bug. The value is in
+// re-running this once real staff accounts exist: whoever's already signed
+// up gets correctly attributed immediately, no separate backfill needed for
+// them, and anyone who signs up later needs a one-time backfill pass instead
+// of this import ever running twice.
+export async function lookupUserIdByEmail(client, email) {
+  if (!email || typeof email !== 'string') return null;
+  const { rows } = await client.query('SELECT id FROM users WHERE lower(email) = lower($1)', [email.trim()]);
+  return rows[0]?.id ?? null;
+}
+
 export function makeStatusResolvers(branchLabelToCode, hqLabelToCode) {
   function resolveBranchStatus(label) {
     if (!label) return { code: 'quoting', inAssay: false };
@@ -137,15 +159,17 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
   if (job.settingCharge && job.settingCharge !== 'None') notes += `\n(Setting charge: ${job.settingCharge})`;
 
   const createdAt = parseTimestamp(job.createdAt) || new Date().toISOString();
+  const ownerUserId = await lookupUserIdByEmail(client, job.owner);
 
   const { rows: jobRows } = await client.query(
     `INSERT INTO jobs (
        office_id, job_name, contact_person, client_phone, priority, status_code, hq_status_code,
        client_delivery_date, po_number, render_link, diacrown_ssp, invoice_amount, notes,
        client_stone_semi_mount, setting_charge_confirmed, design_no, in_assay,
-       assay_office_name, assay_invoice_no, assay_date_sent,
+       assay_office_name, assay_invoice_no, assay_date_sent, owner_user_id,
+       client_comment, client_comment_at, snoozed_until, india_emailed_at, india_email_count,
        import_batch_id, source_ref, imported_at, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now(),$23)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,now(),$29)
      RETURNING id`,
     [
       officeId, jobName, job.contact || null, job.clientPhone || null,
@@ -154,7 +178,9 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
       job.diacrown || null, invoiceAmount, notes.trim() || null,
       !!job.clientStoneSemiMount, !!job.settingChargeConfirmed, job.designNo || null,
       inAssay || job.status === ASSAY_STATUS_LABEL,
-      job.assayOfficeName || null, job.assayInvoiceNo || null, parseDate(job.assayDateSent),
+      job.assayOfficeName || null, job.assayInvoiceNo || null, parseDate(job.assayDateSent), ownerUserId,
+      job.clientComment || null, parseTimestamp(job.clientCommentAt), parseDate(job.snoozedUntil),
+      parseTimestamp(job.indiaEmailedAt), Number(job.indiaEmailCount) || 0,
       batchId, sourceRef, createdAt,
     ]
   );
@@ -168,8 +194,9 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
          job_id, inquiry_date, quotation_date, cad_issued, qc_pass, ship_date, item_type,
          item_size, qty, metal_type, metal_color, alloy_type, rhodium, stone_type, stone_details,
          stone_source, setting_type, stamp_logo, stamp_metal, stamp_loc, vendor, finding1,
-         approval_date, po_date, stone_issue_date, delivery_date, cad_issued_to
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+         approval_date, po_date, stone_issue_date, delivery_date, cad_issued_to,
+         cad_modification, qc_ready
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
        ON CONFLICT (job_id) DO NOTHING`,
       [
         jobId, parseDate(p.inquiryDate), parseDate(p.quotationDate), parseDate(p.cadIssued), parseDate(p.qcPass),
@@ -178,31 +205,46 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
         p.stoneDetails || null, p.stoneSource || null, p.settingType || null, p.stampLogo || null,
         p.stampMetal || null, p.stampLoc || null, p.vendor || null, p.finding1 || null,
         parseDate(p.approvalDate), parseDate(p.poDate), parseDate(p.stoneIssueDate), parseDate(p.deliveryDate),
-        p.cadIssuedTo || null,
+        p.cadIssuedTo || null, parseDate(p.cadModification), parseDate(p.qcReady),
       ]
     );
   }
 
-  // job_design_entries
+  // job_design_entries — 'set' is the old system's own shorthand for
+  // matching_set (10 real entries use it); without this alias the whole
+  // entry was silently dropped, not just a field within it.
   if (Array.isArray(job.designEntries)) {
     let sortOrder = 0;
     for (const e of job.designEntries) {
-      if (!e || !['custom', 'matching_set', 'stock'].includes(e.kind)) continue;
+      const kind = e?.kind === 'set' ? 'matching_set' : e?.kind;
+      if (!e || !['custom', 'matching_set', 'stock'].includes(kind)) continue;
       await client.query(
         `INSERT INTO job_design_entries (job_id, kind, base_number, description, po_number, sort_order, style_code, qty)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [jobId, e.kind, e.base || null, e.desc || null, e.po || null, sortOrder++, e.styleCode || null, e.qty ? Number(e.qty) || null : null]
+        [jobId, kind, e.base || null, e.desc || null, e.po || null, sortOrder++, e.styleCode || null, e.qty ? Number(e.qty) || null : null]
       );
     }
   }
 
-  // job_client_items — real data mostly has this empty; handle string or object entries defensively
+  // job_client_items — real data mostly has this empty; handle string or object entries defensively.
+  // job_images already has a client_item_id FK + 'client_item' kind built
+  // for exactly this, but the loop never used it — item.images was dropped.
   if (Array.isArray(job.clientItems)) {
     let sortOrder = 0;
     for (const item of job.clientItems) {
       const description = typeof item === 'string' ? item : (item?.description || item?.desc || null);
       if (!description) continue;
-      await client.query('INSERT INTO job_client_items (job_id, description, sort_order) VALUES ($1,$2,$3)', [jobId, description, sortOrder++]);
+      const { rows: itemRows } = await client.query(
+        'INSERT INTO job_client_items (job_id, description, sort_order) VALUES ($1,$2,$3) RETURNING id',
+        [jobId, description, sortOrder++]
+      );
+      const itemImages = Array.isArray(item?.images) ? item.images.filter(isUrl) : [];
+      for (const url of itemImages) {
+        await client.query(
+          'INSERT INTO job_images (job_id, client_item_id, kind, url) VALUES ($1,$2,$3,$4)',
+          [jobId, itemRows[0].id, 'client_item', url]
+        );
+      }
     }
   }
 
@@ -236,13 +278,32 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
     );
   }
 
-  // job_chat_messages — no real-user mapping exists yet, so the historical sender's name is folded into the message body
+  // job_chat_messages — no real-user mapping exists yet, so the historical sender's name is folded into the message body.
+  // m.img is a real attached photo — image_url exists on this table specifically for it, just never read before.
   if (Array.isArray(job.chat)) {
     for (const m of job.chat) {
       const body = `[${m.from || m.role || 'Unknown'}] ${m.text || ''}`.trim();
       await client.query(
-        `INSERT INTO job_chat_messages (job_id, body, created_at) VALUES ($1,$2,$3)`,
-        [jobId, body, parseTimestamp(m.ts) || createdAt]
+        `INSERT INTO job_chat_messages (job_id, body, image_url, created_at) VALUES ($1,$2,$3,$4)`,
+        [jobId, body, isUrl(m.img) ? m.img : null, parseTimestamp(m.ts) || createdAt]
+      );
+    }
+  }
+
+  // job_issues — the old system's issue-tracker data was never read at all.
+  // Real data only ever has one issue object per job (not an array).
+  if (job.issue && typeof job.issue === 'object') {
+    const iss = job.issue;
+    if (iss.type) {
+      const openedBy = await lookupUserIdByEmail(client, iss.flaggedBy);
+      const resolvedBy = await lookupUserIdByEmail(client, iss.resolvedBy);
+      await client.query(
+        `INSERT INTO job_issues (job_id, issue_type, description, status, opened_by_user_id, opened_at, resolved_by_user_id, resolved_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          jobId, iss.type, iss.reason || null, iss.open === false ? 'resolved' : 'open',
+          openedBy, parseTimestamp(iss.flaggedAt) || createdAt, resolvedBy, parseTimestamp(iss.resolvedAt),
+        ]
       );
     }
   }

@@ -336,6 +336,49 @@ export async function changeJobHqStatus(user, jobId, { newHqStatusCode, producti
   });
 }
 
+// The full production spec (metal/stone/vendor/dates) has been captured on
+// every historical job and on any job HQ has set a status for since — this
+// just gives it a place to actually be seen and edited, which never existed.
+const PRODUCTION_FIELD_MAP = {
+  inquiryDate: 'inquiry_date', quotationDate: 'quotation_date', cadIssued: 'cad_issued',
+  cadModification: 'cad_modification', qcReady: 'qc_ready', qcPass: 'qc_pass', shipDate: 'ship_date',
+  itemType: 'item_type', itemSize: 'item_size', qty: 'qty', metalType: 'metal_type',
+  metalColor: 'metal_color', alloyType: 'alloy_type', rhodium: 'rhodium', stoneType: 'stone_type',
+  stoneDetails: 'stone_details', stoneSource: 'stone_source', settingType: 'setting_type',
+  stampLogo: 'stamp_logo', stampMetal: 'stamp_metal', stampLoc: 'stamp_loc', vendor: 'vendor',
+  finding1: 'finding1', approvalDate: 'approval_date', poDate: 'po_date',
+  stoneIssueDate: 'stone_issue_date', deliveryDate: 'delivery_date', cadIssuedTo: 'cad_issued_to',
+};
+
+export async function getJobProduction(user, jobId) {
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
+  const { rows } = await pool.query('SELECT * FROM job_production WHERE job_id = $1', [jobId]);
+  return rows[0] ?? {};
+}
+
+export async function updateJobProduction(user, jobId, input) {
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
+
+  const sets = [];
+  const params = [jobId];
+  for (const [key, col] of Object.entries(PRODUCTION_FIELD_MAP)) {
+    if (input[key] !== undefined) {
+      params.push(input[key] === '' ? null : input[key]);
+      sets.push(`${col} = $${params.length}`);
+    }
+  }
+  if (!sets.length) return getJobProduction(user, jobId);
+
+  await pool.query(
+    `INSERT INTO job_production (job_id) VALUES ($1) ON CONFLICT (job_id) DO NOTHING`,
+    [jobId]
+  );
+  await pool.query(`UPDATE job_production SET ${sets.join(', ')} WHERE job_id = $1`, params);
+  return getJobProduction(user, jobId);
+}
+
 export async function listJobImages(user, jobId) {
   const job = await getJobById(user, jobId);
   if (!job) return null;

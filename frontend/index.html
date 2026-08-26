@@ -432,7 +432,11 @@
       <div><label>PO Number</label><input id="d_po"></div>
       <div class="checkline" style="margin-top:22px"><input type="checkbox" id="d_semiMount"><label style="margin:0">Client's own stone / semi-mount</label></div>
       <div class="full"><label>Notes</label><textarea id="d_notes" rows="2"></textarea></div>
-      <div class="full"><label>Client Note (with timestamp)</label><textarea id="d_clientComment" rows="2" placeholder="e.g. client asked for a 2-week delay"></textarea></div>
+      <div class="full">
+        <label>Client Note (with timestamp)</label>
+        <div class="meta" id="d_lastClientComment" style="display:none;margin-bottom:6px"></div>
+        <textarea id="d_clientComment" rows="2" placeholder="e.g. client asked for a 2-week delay"></textarea>
+      </div>
       <div class="full">
         <label>Follow-up / chase-up date</label>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -450,6 +454,7 @@
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="production">Production</button>
       <button class="tab-btn" data-tab="issues">Issues</button>
       <button class="tab-btn" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="images">Images</button>
@@ -460,6 +465,41 @@
     </div>
 
     <div class="tabpane active" id="tab-history"><div id="historyList"></div></div>
+
+    <div class="tabpane" id="tab-production">
+      <p class="meta" style="margin-bottom:10px">Manufacturing spec — mostly filled in from historical records or by HQ; branches can add/correct too.</p>
+      <div class="grid2">
+        <div><label>Item Type</label><input id="pr_itemType"></div>
+        <div><label>Item Size</label><input id="pr_itemSize"></div>
+        <div><label>Qty</label><input id="pr_qty"></div>
+        <div><label>Metal Type</label><input id="pr_metalType" placeholder="e.g. 18KT"></div>
+        <div><label>Metal Color</label><input id="pr_metalColor" placeholder="e.g. YG"></div>
+        <div><label>Alloy Type</label><input id="pr_alloyType"></div>
+        <div><label>Rhodium</label><input id="pr_rhodium" placeholder="Yes / No"></div>
+        <div><label>Vendor</label><input id="pr_vendor"></div>
+        <div class="full"><label>Stone Type</label><input id="pr_stoneType" placeholder="e.g. LGD"></div>
+        <div class="full"><label>Stone Details</label><textarea id="pr_stoneDetails" rows="2"></textarea></div>
+        <div><label>Stone Source</label><input id="pr_stoneSource"></div>
+        <div><label>Setting Type</label><input id="pr_settingType"></div>
+        <div><label>Finding</label><input id="pr_finding1"></div>
+        <div><label>CAD Issued To</label><input id="pr_cadIssuedTo"></div>
+        <div><label>Stamp Logo</label><input id="pr_stampLogo"></div>
+        <div><label>Stamp Metal</label><input id="pr_stampMetal"></div>
+        <div><label>Stamp Location</label><input id="pr_stampLoc"></div>
+        <div><label>Inquiry Date</label><input id="pr_inquiryDate" type="date"></div>
+        <div><label>Quotation Date</label><input id="pr_quotationDate" type="date"></div>
+        <div><label>Approval Date</label><input id="pr_approvalDate" type="date"></div>
+        <div><label>PO Date</label><input id="pr_poDate" type="date"></div>
+        <div><label>CAD Issued</label><input id="pr_cadIssued" type="date"></div>
+        <div><label>CAD Modification</label><input id="pr_cadModification" type="date"></div>
+        <div><label>Stone Issue Date</label><input id="pr_stoneIssueDate" type="date"></div>
+        <div><label>QC Ready</label><input id="pr_qcReady" type="date"></div>
+        <div><label>QC Pass</label><input id="pr_qcPass" type="date"></div>
+        <div><label>Ship Date</label><input id="pr_shipDate" type="date"></div>
+        <div><label>Delivery Date</label><input id="pr_deliveryDate" type="date"></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="saveProductionBtn">Save production spec</button></div>
+    </div>
 
     <div class="tabpane" id="tab-issues">
       <div id="issuesList"></div>
@@ -1250,9 +1290,13 @@ async function openJobDetail(jobId) {
   $('d_semiMount').checked = !!job?.client_stone_semi_mount;
   $('d_notes').value = job?.notes || '';
   $('d_clientComment').value = '';
+  $('d_lastClientComment').innerHTML = job?.client_comment
+    ? `<b>Last client note</b> (${job.client_comment_at ? new Date(job.client_comment_at).toLocaleDateString() : 'undated'}): ${escapeHtml(job.client_comment)}`
+    : '';
+  $('d_lastClientComment').style.display = job?.client_comment ? 'block' : 'none';
   $('d_followUpDate').value = job?.follow_up_date ? job.follow_up_date.slice(0,10) : '';
   openSheet($('jobDetailOverlay'));
-  const tasks = [loadHistory(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId)];
+  const tasks = [loadHistory(jobId), loadProduction(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId)];
   if (USER.officeHasAssay) tasks.push(loadAssayTab(jobId));
   await Promise.all(tasks);
   api(`/jobs/${jobId}/chat/read`, { method: 'POST' }).catch(() => {});
@@ -1298,6 +1342,24 @@ async function loadHistory(jobId) {
       <div class="meta">${new Date(h.changed_at).toLocaleString()}${h.changed_by_name ? ' · ' + escapeHtml(h.changed_by_name) : ''}${h.note ? ' · ' + escapeHtml(h.note) : ''}</div>
     </div>`).join('') || '<p class="meta">No history yet.</p>';
 }
+
+// ---- Production tab ----
+const PRODUCTION_DATE_FIELDS = ['inquiryDate','quotationDate','approvalDate','poDate','cadIssued','cadModification','stoneIssueDate','qcReady','qcPass','shipDate','deliveryDate'];
+const PRODUCTION_TEXT_FIELDS = ['itemType','itemSize','qty','metalType','metalColor','alloyType','rhodium','vendor','stoneType','stoneDetails','stoneSource','settingType','finding1','cadIssuedTo','stampLogo','stampMetal','stampLoc'];
+async function loadProduction(jobId) {
+  const { production } = await api(`/jobs/${jobId}/production`);
+  const colMap = { inquiryDate:'inquiry_date', quotationDate:'quotation_date', approvalDate:'approval_date', poDate:'po_date', cadIssued:'cad_issued', cadModification:'cad_modification', stoneIssueDate:'stone_issue_date', qcReady:'qc_ready', qcPass:'qc_pass', shipDate:'ship_date', deliveryDate:'delivery_date', itemType:'item_type', itemSize:'item_size', qty:'qty', metalType:'metal_type', metalColor:'metal_color', alloyType:'alloy_type', rhodium:'rhodium', vendor:'vendor', stoneType:'stone_type', stoneDetails:'stone_details', stoneSource:'stone_source', settingType:'setting_type', finding1:'finding1', cadIssuedTo:'cad_issued_to', stampLogo:'stamp_logo', stampMetal:'stamp_metal', stampLoc:'stamp_loc' };
+  for (const f of PRODUCTION_DATE_FIELDS) $('pr_' + f).value = production[colMap[f]] ? String(production[colMap[f]]).slice(0, 10) : '';
+  for (const f of PRODUCTION_TEXT_FIELDS) $('pr_' + f).value = production[colMap[f]] ?? '';
+}
+$('saveProductionBtn').onclick = async () => {
+  const body = {};
+  for (const f of [...PRODUCTION_DATE_FIELDS, ...PRODUCTION_TEXT_FIELDS]) body[f] = $('pr_' + f).value.trim();
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/production`, { method: 'PATCH', body: JSON.stringify(body) });
+    toast('Production spec saved.');
+  } catch (e) { toast(e.message); }
+};
 
 // ---- Issues tab ----
 async function loadIssues(jobId) {

@@ -41,6 +41,26 @@ jobsRouter.get('/:id', async (req, res, next) => {
   }
 });
 
+jobsRouter.get('/:id/production', async (req, res, next) => {
+  try {
+    const production = await JobsService.getJobProduction(req.user, req.params.id);
+    if (production === null) return res.status(404).json({ error: 'Job not found' });
+    res.json({ production });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.patch('/:id/production', async (req, res, next) => {
+  try {
+    const production = await JobsService.updateJobProduction(req.user, req.params.id, req.body || {});
+    if (production === null) return res.status(404).json({ error: 'Job not found' });
+    res.json({ production });
+  } catch (err) {
+    next(err);
+  }
+});
+
 jobsRouter.get('/:id/images', async (req, res, next) => {
   try {
     const images = await JobsService.listJobImages(req.user, req.params.id);
