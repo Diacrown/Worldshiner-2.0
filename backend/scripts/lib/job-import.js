@@ -206,8 +206,17 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
     }
   }
 
-  // job_images — clientRef/cadImage are already-hosted URLs (Cloudinary/Drive); link directly, skip bare filenames that aren't real URLs
-  const imageSets = [['clientRef', 'client_ref'], ['cadImage', 'cad']];
+  // job_images — clientRef/cadImage are already-hosted URLs (Cloudinary/Drive); link directly, skip bare filenames that aren't real URLs.
+  // indiaCardCads/indiaCardRefs are the same kind of India-side CAD reference
+  // photo, just a field the original migration never checked. indiaHiddenRefs
+  // is kept as its own kind — its old-system name implies it was
+  // deliberately hidden from someone, and listJobImages() restricts it to
+  // HQ/admin viewers rather than assuming it's safe for every branch office.
+  const imageSets = [
+    ['clientRef', 'client_ref'], ['cadImage', 'cad'],
+    ['indiaCardCads', 'cad'], ['indiaCardRefs', 'cad'],
+    ['indiaHiddenRefs', 'india_hidden'],
+  ];
   for (const [field, kind] of imageSets) {
     const val = job[field];
     const urls = Array.isArray(val) ? val : (isUrl(val) ? [val] : []);

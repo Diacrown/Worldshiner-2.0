@@ -343,7 +343,12 @@ export async function listJobImages(user, jobId) {
     'SELECT * FROM job_images WHERE job_id = $1 ORDER BY uploaded_at ASC',
     [jobId]
   );
-  return rows;
+  // 'india_hidden' images (historical data's indiaHiddenRefs) are restricted
+  // to HQ/admin — the old system's own field name implies these were
+  // deliberately kept from someone, so default to the safer visibility
+  // rather than assume every branch office should see them.
+  const canSeeHidden = user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq;
+  return canSeeHidden ? rows : rows.filter((r) => r.kind !== 'india_hidden');
 }
 
 export async function addJobImage(user, jobId, { kind, url, clientItemId }) {

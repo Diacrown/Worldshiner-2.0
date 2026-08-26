@@ -1349,10 +1349,19 @@ $('chatSendBtn').onclick = async () => {
 };
 
 // ---- Images tab ----
+// Some historical files attached as "images" are actually PDFs (or HEIC,
+// which most browsers can't decode) — an <img> tag just shows a broken icon
+// for those, so give them a clickable file tile instead of a thumbnail.
+function isBrowserRenderableImage(url) {
+  return !/\.(pdf|heic)(\?.*)?$/i.test(url);
+}
 async function loadImages(jobId) {
   const { images } = await api(`/jobs/${jobId}/images`);
   $('imgGrid').innerHTML = images.map(img => `
-    <div class="thumb"><img src="${img.url}" alt=""><button class="del" data-del="${img.id}">×</button></div>`).join('');
+    <div class="thumb">${isBrowserRenderableImage(img.url)
+      ? `<img src="${img.url}" alt="">`
+      : `<a href="${img.url}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--s2);text-decoration:none;color:var(--text2);font-size:11px;text-align:center;padding:4px">📄 View file</a>`
+    }<button class="del" data-del="${img.id}">×</button></div>`).join('');
   $('imgGrid').querySelectorAll('button[data-del]').forEach(b => {
     b.onclick = async () => { await api(`/jobs/${CURRENT_JOB_ID}/images/${b.dataset.del}`, { method: 'DELETE' }); await loadImages(CURRENT_JOB_ID); };
   });
