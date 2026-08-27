@@ -16,6 +16,18 @@ export const BRANCH_STATUS_ALIASES = {
 // dedicated in_assay flag instead (see migration 008), not a status code.
 export const ASSAY_STATUS_LABEL = 'At Assay Office';
 
+// job.specs is a flexible {k,v} array — the old system's own free-form
+// spreadsheet-column sidecar (Tier 2 of the field audit). Of its ~23 real
+// keys, these already have a proper structured column elsewhere in this
+// schema, so they're deliberately not duplicated into job_specs.
+export const SPEC_SKIP_KEYS = new Set([
+  'Loc', 'JobNo', 'Customer', 'CAD Issued To', 'CAD Issued Date',
+  'Ship Date', 'Stone Issue Date', 'SSP', 'Item Size',
+]);
+export function normalizeSpecKey(k) {
+  return (k || '').replace(/\s+/g, ' ').trim();
+}
+
 // HQ-side aliases — best-effort matches for labels with no exact seed
 // match, chosen by closest real-world meaning. Low-volume (1-9 jobs each
 // in the real data), reviewed manually rather than left unmapped.
@@ -208,6 +220,23 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
         p.cadIssuedTo || null, parseDate(p.cadModification), parseDate(p.qcReady),
       ]
     );
+  }
+
+  // job_specs — the old system's flexible per-job spec sidecar (Tier 2).
+  // Keys already covered by a real column (see SPEC_SKIP_KEYS) are skipped
+  // here to avoid duplicating them under a second name.
+  if (Array.isArray(job.specs)) {
+    let sortOrder = 0;
+    for (const entry of job.specs) {
+      const key = normalizeSpecKey(entry?.k);
+      if (!key || SPEC_SKIP_KEYS.has(key)) continue;
+      const value = entry?.v == null ? null : String(entry.v);
+      if (!value) continue;
+      await client.query(
+        'INSERT INTO job_specs (job_id, spec_key, spec_value, sort_order) VALUES ($1,$2,$3,$4)',
+        [jobId, key, value, sortOrder++]
+      );
+    }
   }
 
   // job_design_entries — 'set' is the old system's own shorthand for

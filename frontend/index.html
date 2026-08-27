@@ -523,6 +523,7 @@
       <button class="tab-btn" data-tab="design">Design Entries</button>
       <button class="tab-btn" data-tab="items">Client Items</button>
       <button class="tab-btn" data-tab="setterpolisher">Setter/Polisher/Repairer</button>
+      <button class="tab-btn" data-tab="specs">Reference Specs</button>
       <button class="tab-btn" data-tab="assay" id="assayTabBtn" style="display:none">Assay Office</button>
     </div>
 
@@ -629,6 +630,16 @@
         <div><label>Due date</label><input id="sp_dueDate" type="date"></div>
       </div>
       <div class="actions"><button class="btn-primary btn-sm" id="addSetterPolisherBtn">Add</button></div>
+    </div>
+
+    <div class="tabpane" id="tab-specs">
+      <p class="meta" style="margin-bottom:10px">Legacy per-job details that don't fit a fixed field — style codes, certificate numbers, tag colors, reference image links — plus anything you add here.</p>
+      <div id="specsList"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Label</label><input id="sp2_key" placeholder="e.g. Cert No."></div>
+        <div><label>Value</label><input id="sp2_value"></div>
+      </div>
+      <div class="actions"><button class="btn-primary btn-sm" id="addSpecBtn">Add</button></div>
     </div>
 
     <div class="tabpane" id="tab-assay">
@@ -1744,7 +1755,7 @@ async function openJobDetail(jobId) {
   $('d_lastClientComment').style.display = job?.client_comment ? 'block' : 'none';
   $('d_followUpDate').value = job?.follow_up_date ? job.follow_up_date.slice(0,10) : '';
   openSheet($('jobDetailOverlay'));
-  const tasks = [loadHistory(jobId), loadProduction(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId)];
+  const tasks = [loadHistory(jobId), loadProduction(jobId), loadIssues(jobId), loadChat(jobId), loadImages(jobId), loadDesignEntries(jobId), loadClientItems(jobId), loadSetterPolisher(jobId), loadSpecs(jobId)];
   if (USER.officeHasAssay) tasks.push(loadAssayTab(jobId));
   await Promise.all(tasks);
   api(`/jobs/${jobId}/chat/read`, { method: 'POST' }).catch(() => {});
@@ -1957,6 +1968,37 @@ $('addClientItemBtn').onclick = async () => {
     await api(`/jobs/${CURRENT_JOB_ID}/client-items`, { method: 'POST', body: JSON.stringify({ description }) });
     $('ci_desc').value = '';
     toast('Client item added.'); await loadClientItems(CURRENT_JOB_ID);
+  } catch (e) { toast(e.message); }
+};
+
+// ---- Reference Specs tab ----
+async function loadSpecs(jobId) {
+  const { specs } = await api(`/jobs/${jobId}/specs`);
+  $('specsList').innerHTML = specs.map(s => {
+    const isLink = /^https?:\/\//i.test(s.spec_value || '');
+    const valueHtml = isLink
+      ? `<a href="${escapeHtml(s.spec_value)}" target="_blank" rel="noopener">View reference</a>`
+      : escapeHtml(s.spec_value || '');
+    return `
+    <div class="history-item" data-id="${s.id}">
+      <div><b>${escapeHtml(s.spec_key)}:</b> ${valueHtml} <button class="btn-ghost btn-sm" data-del-spec="${s.id}" style="float:right">Delete</button></div>
+    </div>`;
+  }).join('') || '<p class="meta">No reference specs recorded.</p>';
+  $('specsList').querySelectorAll('button[data-del-spec]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/jobs/${jobId}/specs/${b.dataset.delSpec}`, { method: 'DELETE' }); await loadSpecs(jobId); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
+$('addSpecBtn').onclick = async () => {
+  const key = $('sp2_key').value.trim();
+  const value = $('sp2_value').value.trim();
+  if (!key) { toast('Label is required.'); return; }
+  try {
+    await api(`/jobs/${CURRENT_JOB_ID}/specs`, { method: 'POST', body: JSON.stringify({ key, value }) });
+    $('sp2_key').value = ''; $('sp2_value').value = '';
+    toast('Spec added.'); await loadSpecs(CURRENT_JOB_ID);
   } catch (e) { toast(e.message); }
 };
 

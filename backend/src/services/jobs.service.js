@@ -427,6 +427,49 @@ export async function removeJobImage(user, jobId, imageId) {
   return rowCount > 0;
 }
 
+// job_specs — the flexible reference-spec sidecar (Tier 2 field-audit gap):
+// legacy per-job fields like Style code, Cert No., Tag Color, or a
+// reference image link that don't have a dedicated column (see job-import.js
+// SPEC_SKIP_KEYS for what's excluded because it's already captured
+// elsewhere), plus anything staff add going forward.
+export async function listJobSpecs(user, jobId) {
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
+  const { rows } = await pool.query(
+    'SELECT * FROM job_specs WHERE job_id = $1 ORDER BY sort_order ASC, id ASC',
+    [jobId]
+  );
+  return rows;
+}
+
+export async function addJobSpec(user, jobId, { key, value }) {
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
+  const specKey = (key || '').trim();
+  if (!specKey) {
+    const err = new Error('key is required');
+    err.status = 400;
+    throw err;
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO job_specs (job_id, spec_key, spec_value, sort_order)
+     VALUES ($1, $2, $3, COALESCE((SELECT MAX(sort_order) + 1 FROM job_specs WHERE job_id = $1), 0))
+     RETURNING *`,
+    [jobId, specKey, value || null]
+  );
+  return rows[0];
+}
+
+export async function removeJobSpec(user, jobId, specId) {
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
+  const { rowCount } = await pool.query(
+    'DELETE FROM job_specs WHERE id = $1 AND job_id = $2',
+    [specId, jobId]
+  );
+  return rowCount > 0;
+}
+
 export async function getJobHistory(user, jobId) {
   const job = await getJobById(user, jobId);
   if (!job) return null;

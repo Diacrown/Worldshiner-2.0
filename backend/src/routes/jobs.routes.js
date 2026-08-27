@@ -113,6 +113,36 @@ jobsRouter.delete('/:id/images/:imageId', async (req, res, next) => {
   }
 });
 
+jobsRouter.get('/:id/specs', async (req, res, next) => {
+  try {
+    const specs = await JobsService.listJobSpecs(req.user, req.params.id);
+    if (specs === null) return res.status(404).json({ error: 'Job not found' });
+    res.json({ specs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.post('/:id/specs', async (req, res, next) => {
+  try {
+    const spec = await JobsService.addJobSpec(req.user, req.params.id, req.body || {});
+    if (!spec) return res.status(404).json({ error: 'Job not found' });
+    res.status(201).json({ spec });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.delete('/:id/specs/:specId', async (req, res, next) => {
+  try {
+    const ok = await JobsService.removeJobSpec(req.user, req.params.id, req.params.specId);
+    if (!ok) return res.status(404).json({ error: 'Spec or job not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 jobsRouter.get('/:id/history', async (req, res, next) => {
   try {
     const history = await JobsService.getJobHistory(req.user, req.params.id);
