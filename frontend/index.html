@@ -395,8 +395,10 @@
           <div class="section-head"><div><h2>Clients</h2><p>Search and browse clients by region and branch office</p></div></div>
           <div class="toolbar">
             <input type="text" id="cli_search" placeholder="Search a client by name…">
+            <button class="btn-ghost btn-sm" id="cli_mergeToolBtn" style="display:none">🔀 Find duplicate clients</button>
           </div>
           <div id="cli_searchResults" style="display:none;margin-bottom:16px"></div>
+          <div id="cli_mergePanel" style="display:none;margin-bottom:16px"></div>
 
           <div id="cli_globeWrap">
             <div id="cli_starfield"></div>
@@ -943,6 +945,7 @@ async function showApp() {
   document.querySelector('[data-view="mail"]').style.display = isHqOrAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="sla"]').style.display = 'flex';
   document.querySelector('[data-view="clients"]').style.display = 'flex';
+  $('cli_mergeToolBtn').style.display = isHqOrAdmin ? 'inline-block' : 'none';
   const hasAssay = !!USER.officeHasAssay;
   $('assayTabBtn').style.display = hasAssay ? 'inline-block' : 'none';
   $('batchAssayBtn').style.display = hasAssay ? 'inline-block' : 'none';
@@ -1600,6 +1603,54 @@ function runClientSearch(term) {
     el.onclick = () => {
       $('cli_search').value = ''; box.style.display = 'none'; box.innerHTML = '';
       openClientJobs(el.dataset.office, el.dataset.client);
+    };
+  });
+}
+
+// ---- Duplicate-client merge tool (HQ/admin only) ----
+// Client identity is a guessed job_name prefix (see backend deriveClientKey),
+// so a client typed inconsistently across jobs shows up as two entries.
+// Merging rewrites job_name for real on every affected job — a permanent
+// fix, not a display-only alias — so it's gated to HQ/admin in the backend
+// too, not just hidden here.
+let CLI_MERGE_PANEL_OPEN = false;
+async function refreshMergeSuggestions() {
+  const panel = $('cli_mergePanel');
+  panel.style.display = 'block';
+  panel.innerHTML = '<p class="meta">Looking for likely duplicates…</p>';
+  try {
+    const { suggestions } = await api('/clients/merge-suggestions');
+    renderMergeSuggestions(suggestions);
+  } catch (e) { panel.innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; }
+}
+$('cli_mergeToolBtn').onclick = () => {
+  CLI_MERGE_PANEL_OPEN = !CLI_MERGE_PANEL_OPEN;
+  if (!CLI_MERGE_PANEL_OPEN) { $('cli_mergePanel').style.display = 'none'; $('cli_mergePanel').innerHTML = ''; return; }
+  refreshMergeSuggestions();
+};
+function renderMergeSuggestions(suggestions) {
+  const panel = $('cli_mergePanel');
+  if (!suggestions.length) { panel.innerHTML = '<p class="meta">No likely duplicates found — everything looks distinct.</p>'; return; }
+  panel.innerHTML = suggestions.map((s, i) => `
+    <div class="cli-client-row" style="cursor:default;align-items:center">
+      <div>
+        <div class="name">${escapeHtml(s.suggestedCanonical)} (${s.canonicalJobCount}) <span class="meta">merge from</span> ${escapeHtml(s.suggestedDuplicate)} (${s.duplicateJobCount})</div>
+        <div class="meta">${escapeHtml(s.officeName)} · ${s.reason === 'prefix' ? 'one name is a prefix of the other' : 'similar spelling'}</div>
+      </div>
+      <button class="btn-primary btn-sm" data-merge-idx="${i}">Merge</button>
+    </div>`).join('');
+  panel.querySelectorAll('[data-merge-idx]').forEach((btn) => {
+    const s = suggestions[Number(btn.dataset.mergeIdx)];
+    btn.onclick = async () => {
+      if (!confirm(`Rename every "${s.suggestedDuplicate}" job at ${s.officeName} to "${s.suggestedCanonical}"? This can't be undone automatically.`)) return;
+      try {
+        const { updated } = await api('/clients/merge', { method: 'POST', body: JSON.stringify({
+          officeCode: s.officeCode, fromName: s.suggestedDuplicate, toName: s.suggestedCanonical,
+        })});
+        toast(`Merged ${updated} job(s) into "${s.suggestedCanonical}".`);
+        CLI_DATA = null; // force a fresh directory fetch next time Clients is opened
+        await refreshMergeSuggestions();
+      } catch (e) { toast(e.message); }
     };
   });
 }

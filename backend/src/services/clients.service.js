@@ -84,3 +84,124 @@ export async function getClientDirectory(user) {
     countries: Array.from(r.countries.values()),
   }));
 }
+
+function levenshtein(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+// Flags likely-duplicate client buckets within the same office — the
+// grouping in getClientDirectory is a guessed job_name prefix (see
+// deriveClientKey), so a client typed inconsistently across jobs (a missing
+// "JWY", a typo) shows up as two separate entries instead of one. Two
+// heuristics, since either alone misses real cases: one name is a prefix of
+// the other ("PHENIX" vs "PHENIX JWY"), or they're a close edit-distance
+// match (a typo). Both run purely over the already-fetched directory, no
+// extra queries, so cost is negligible even at ~400 clients per office.
+export async function getMergeSuggestions(user) {
+  const directory = await getClientDirectory(user);
+  const suggestions = [];
+
+  for (const region of directory) {
+    for (const country of region.countries) {
+      for (const office of country.offices) {
+        const clients = office.clients;
+        for (let i = 0; i < clients.length; i++) {
+          for (let j = i + 1; j < clients.length; j++) {
+            const a = clients[i], b = clients[j];
+            if (a.clientName === b.clientName) continue;
+            // A prefix match is only a good duplicate signal when the extra
+            // trailing text is short — a client typed without its usual
+            // suffix ("PHENIX" vs "PHENIX JWY", +4 chars). A big trailing
+            // difference ("PHENIX JWY" vs "PHENIX JWY J-006-05921", +13)
+            // usually means the longer one is a distinct job name that
+            // never had its " - description" separator, not the same
+            // client — those aren't worth suggesting at all.
+            const shorterLen = Math.min(a.clientName.length, b.clientName.length);
+            const longerLen = Math.max(a.clientName.length, b.clientName.length);
+            const extraLen = longerLen - shorterLen;
+            const isPrefix = (a.clientName.startsWith(b.clientName) || b.clientName.startsWith(a.clientName))
+              && extraLen <= Math.max(6, shorterLen * 0.5);
+            const isCloseTypo = shorterLen >= 5 && levenshtein(a.clientName, b.clientName) <= Math.max(1, Math.floor(shorterLen * 0.2));
+            if (!isPrefix && !isCloseTypo) continue;
+            const [bigger, smaller] = a.jobCount >= b.jobCount ? [a, b] : [b, a];
+            suggestions.push({
+              officeCode: office.officeCode,
+              officeName: office.officeName,
+              suggestedCanonical: bigger.clientName,
+              suggestedDuplicate: smaller.clientName,
+              canonicalJobCount: bigger.jobCount,
+              duplicateJobCount: smaller.jobCount,
+              reason: isPrefix ? 'prefix' : 'similar-spelling',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return suggestions.sort((x, y) => (y.canonicalJobCount + y.duplicateJobCount) - (x.canonicalJobCount + x.duplicateJobCount));
+}
+
+// Renames the client-name prefix on every job at `officeCode` currently
+// grouped under `fromName` to `toName`. This is a real, permanent edit to
+// job_name — deliberately so, since it fixes the actual data quality issue
+// rather than adding an alias layer every future client-grouping query
+// would need to know about. Scoped through buildScope so an org admin can't
+// merge clients in an office outside their own org.
+export async function mergeClients(user, { officeCode, fromName, toName }) {
+  if (!officeCode || !fromName || !toName) {
+    const err = new Error('officeCode, fromName, and toName are required');
+    err.status = 400;
+    throw err;
+  }
+  const { where, params } = buildScope(user, { officeOverride: officeCode });
+  const { rows } = await pool.query(`SELECT j.id, j.job_name FROM jobs j ${where}`, params);
+
+  // Matches deriveClientKey's own normalization exactly, so this only
+  // touches jobs that actually group under fromName today.
+  const fromKey = fromName.trim().replace(/\s+/g, ' ').toUpperCase();
+  const canonicalName = toName.trim();
+  let updated = 0;
+  for (const row of rows) {
+    if (deriveClientKey(row.job_name) !== fromKey) continue;
+    const idx = row.job_name.indexOf(' - ');
+    let newName;
+    if (idx !== -1) {
+      // Already has a separator — swap only the client-name half, leave
+      // the " - description" half exactly as-is.
+      newName = canonicalName + row.job_name.slice(idx);
+    } else {
+      // No separator means the whole job_name doubled as the client key —
+      // e.g. "Phenix Jwy Jai Thompson" with no dash anywhere. Every row in
+      // this bucket has the same content as fromName (that's why it
+      // matched), so there's nothing left over relative to fromName itself
+      // — the real question is whether the row's name extends past the
+      // *canonical* name. If it does ("Phenix Jwy Jai Thompson" starts with
+      // canonical "PHENIX JWY"), that extra text is real per-job content
+      // ("Jai Thompson") and gets preserved with a proper separator instead
+      // of silently discarded. If it doesn't (e.g. a straight typo like
+      // "PHENIX JAI" for "PHENIX JWY"), there's nothing to preserve.
+      const upperOriginal = row.job_name.toUpperCase();
+      const upperCanonical = canonicalName.toUpperCase();
+      if (upperOriginal.length > upperCanonical.length && upperOriginal.startsWith(upperCanonical)) {
+        const remainder = row.job_name.slice(canonicalName.length).trim();
+        newName = remainder ? `${canonicalName} - ${remainder}` : canonicalName;
+      } else {
+        newName = canonicalName;
+      }
+    }
+    if (newName === row.job_name) continue;
+    await pool.query('UPDATE jobs SET job_name = $1 WHERE id = $2', [newName, row.id]);
+    updated++;
+  }
+  return { updated };
+}
