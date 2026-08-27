@@ -134,6 +134,75 @@ export async function searchInquiries(officeId, query = 'is:unread') {
   return res.json();
 }
 
+function decodeBase64Url(data) {
+  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+}
+
+// Gmail's MIME structure nests parts arbitrarily (plain text, HTML, and
+// attachments as siblings, sometimes inside a multipart/alternative wrapper
+// inside another multipart/mixed wrapper) — walks it looking for the first
+// real text/plain part before falling back to whatever text exists.
+function extractPlainTextBody(payload) {
+  if (!payload) return '';
+  if (payload.mimeType === 'text/plain' && payload.body?.data) return decodeBase64Url(payload.body.data);
+  if (Array.isArray(payload.parts)) {
+    const plainPart = payload.parts.find((p) => p.mimeType === 'text/plain' && p.body?.data);
+    if (plainPart) return decodeBase64Url(plainPart.body.data);
+    for (const part of payload.parts) {
+      const nested = extractPlainTextBody(part);
+      if (nested) return nested;
+    }
+  }
+  if (payload.body?.data) return decodeBase64Url(payload.body.data); // e.g. bare text/html with no parts
+  return '';
+}
+
+function headerValue(headers, name) {
+  return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+}
+
+// Fetches one message's full content for human review (inbox triage / new
+// job creation from an email) — deliberately not persisted anywhere; the
+// body is capped since this is for a person to read, not an archive.
+export async function getMessageDetail(officeId, messageId) {
+  const accessToken = await getAccessToken(officeId);
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const err = new Error(`Gmail message fetch failed (${res.status})`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await res.json();
+  const headers = data.payload?.headers;
+  let body = extractPlainTextBody(data.payload).trim();
+  if (body && /<[a-z][\s\S]*>/i.test(body)) body = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return {
+    id: data.id,
+    threadId: data.threadId,
+    from: headerValue(headers, 'From'),
+    subject: headerValue(headers, 'Subject'),
+    date: headerValue(headers, 'Date'),
+    snippet: data.snippet || '',
+    body: body.slice(0, 4000),
+  };
+}
+
+// Recent inbox messages with full content, for the Mail tab's "Check inbox"
+// review flow. One Gmail API call per message (N+1) — acceptable for a
+// manually-triggered check of ~15 messages, not a background poller.
+export async function listInboxCandidates(officeId, { query = 'in:inbox newer_than:30d', maxResults = 15 } = {}) {
+  const list = await searchInquiries(officeId, query);
+  const ids = (list.messages || []).slice(0, maxResults).map((m) => m.id);
+  const details = [];
+  for (const id of ids) {
+    try { details.push(await getMessageDetail(officeId, id)); }
+    catch { /* one message failing to fetch shouldn't fail the whole batch */ }
+  }
+  return details;
+}
+
 function buildMimeMessage({ to, subject, body }) {
   const lines = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', body];
   return Buffer.from(lines.join('\r\n')).toString('base64url');

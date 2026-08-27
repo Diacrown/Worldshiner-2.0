@@ -389,6 +389,16 @@
             </div>
             <div class="actions"><button class="btn-primary btn-sm" id="mail_sendBtn">Send</button></div>
           </div>
+
+          <div id="mail_inboxSection" style="display:none;margin-top:28px">
+            <div class="toolbar">
+              <h2 style="font-size:15px">Inbox — replies &amp; new inquiries</h2>
+              <span class="spacer"></span>
+              <button class="btn-ghost btn-sm" id="mail_checkInboxBtn">Check inbox</button>
+            </div>
+            <p class="meta" style="margin-bottom:12px">Recent messages from the last 30 days, matched against open jobs by PO number where possible.</p>
+            <div id="mail_inboxList"></div>
+          </div>
         </div>
 
         <div id="clientsView" style="display:none">
@@ -1171,9 +1181,11 @@ async function loadMailStatus() {
     if (!status.configured) {
       $('mail_status').innerHTML = `<b>Not configured.</b> This office admin needs to add Google Cloud OAuth credentials (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI) to the server's .env before Gmail features work.`;
       $('mail_actions').style.display = 'none';
+      $('mail_inboxSection').style.display = 'none';
     } else if (!status.connected) {
       $('mail_status').innerHTML = `<b>Not connected.</b> <button class="btn-primary btn-sm" id="mail_connectBtn" style="margin-left:8px">Connect Gmail</button>`;
       $('mail_actions').style.display = 'none';
+      $('mail_inboxSection').style.display = 'none';
       $('mail_connectBtn').onclick = async () => {
         try { const { authUrl } = await api('/gmail/connect'); window.location.href = authUrl; }
         catch (e) { toast(e.message); }
@@ -1181,6 +1193,7 @@ async function loadMailStatus() {
     } else {
       $('mail_status').innerHTML = `<b>Connected</b> as ${escapeHtml(status.googleEmail || 'unknown')}. <button class="btn-ghost btn-sm" id="mail_disconnectBtn" style="margin-left:8px">Disconnect</button>`;
       $('mail_actions').style.display = 'block';
+      $('mail_inboxSection').style.display = 'block';
       $('mail_disconnectBtn').onclick = async () => {
         try { await api('/gmail/disconnect', { method: 'DELETE' }); await loadMailStatus(); }
         catch (e) { toast(e.message); }
@@ -1194,6 +1207,59 @@ $('mail_sendBtn').onclick = async () => {
     toast('Email sent.'); ['mail_to','mail_subject','mail_body'].forEach(id => $(id).value = '');
   } catch (e) { toast(e.message); }
 };
+
+// ---- Inbox review — matched replies go to job chat, unmatched become a
+// prefilled new job draft for a human to confirm before creating. ----
+function senderDisplayName(fromHeader) {
+  const match = (fromHeader || '').match(/^"?([^"<]*)"?\s*<.*>$/);
+  const name = (match ? match[1] : fromHeader || '').trim();
+  return name || (fromHeader || '').trim();
+}
+$('mail_checkInboxBtn').onclick = async () => {
+  const list = $('mail_inboxList');
+  list.innerHTML = '<p class="meta">Checking inbox…</p>';
+  try {
+    const { messages } = await api('/gmail/inbox');
+    if (!messages.length) { list.innerHTML = '<p class="meta">Nothing in the inbox from the last 30 days.</p>'; return; }
+    list.innerHTML = messages.map((m, i) => `
+      <div class="cli-client-row" style="cursor:default;align-items:flex-start;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;width:100%">
+          <div><div class="name">${escapeHtml(m.subject || '(no subject)')}</div><div class="meta">${escapeHtml(senderDisplayName(m.from))} · ${escapeHtml(m.date || '')}</div></div>
+        </div>
+        <div class="meta" style="max-width:100%">${escapeHtml((m.snippet || m.body || '').slice(0, 220))}</div>
+        <div>
+          ${m.matchedJob
+            ? `<span class="badge Medium">Matches: ${escapeHtml(m.matchedJob.job_name)} (PO ${escapeHtml(m.matchedJob.po_number)})</span>
+               <button class="btn-primary btn-sm" data-add-chat="${i}" style="margin-left:8px">Add to job chat</button>`
+            : `<button class="btn-ghost btn-sm" data-new-job="${i}">No match — create job from this</button>`}
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('[data-add-chat]').forEach((btn) => {
+      const m = messages[Number(btn.dataset.addChat)];
+      btn.onclick = async () => {
+        try {
+          await api(`/jobs/${m.matchedJob.id}/chat`, { method: 'POST', body: JSON.stringify({
+            body: `[Email from ${senderDisplayName(m.from)}] ${m.body || m.snippet || ''}`.slice(0, 4000),
+          })});
+          toast(`Added to ${m.matchedJob.job_name}'s chat.`);
+        } catch (e) { toast(e.message); }
+      };
+    });
+    list.querySelectorAll('[data-new-job]').forEach((btn) => {
+      const m = messages[Number(btn.dataset.newJob)];
+      btn.onclick = () => openNewJobFromEmail(m);
+    });
+  } catch (e) { list.innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; }
+};
+function openNewJobFromEmail(m) {
+  const sender = senderDisplayName(m.from);
+  $('f_jobName').value = (sender && m.subject) ? `${sender} - ${m.subject}` : (m.subject || sender || '');
+  $('f_contact').value = sender;
+  $('f_notes').value = `From email (${m.date || 'undated'}):\n${m.body || m.snippet || ''}`.slice(0, 4000);
+  switchView('jobs');
+  openSheet($('newJobOverlay'));
+  toast('Review the details below, then create the job.');
+}
 function switchView(view) {
   document.querySelectorAll('.navlist [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('main > [id$="View"]').forEach(el => el.style.display = el.id === view + 'View' ? 'block' : 'none');

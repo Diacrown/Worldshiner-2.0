@@ -473,6 +473,30 @@ export async function removeJobSpec(user, jobId, specId) {
   return rowCount > 0;
 }
 
+// Best-guess match of an inbound email (subject + body) to an existing job,
+// for the Mail tab's inbox-review flow — closes the loop on inbound replies
+// without requiring a client to reply with any special format. Matches on
+// PO number appearing anywhere in the email text, preferring the longest
+// matching PO number (a short/generic one like "1" would otherwise match
+// almost anything). Scoped through buildScope, so it only ever suggests a
+// job the caller could already see.
+export async function matchJobByText(user, text) {
+  if (!text) return null;
+  const { where, params } = buildScope(user);
+  const textParamIndex = params.length + 1;
+  const sql = `
+    SELECT j.id, j.job_name, j.po_number, o.name AS office_name
+    FROM jobs j
+    JOIN offices o ON o.id = j.office_id
+    ${where ? where + ' AND' : 'WHERE'} j.po_number IS NOT NULL AND j.po_number != ''
+      AND $${textParamIndex} ILIKE '%' || j.po_number || '%'
+    ORDER BY length(j.po_number) DESC
+    LIMIT 1
+  `;
+  const { rows } = await pool.query(sql, [...params, text]);
+  return rows[0] || null;
+}
+
 export async function getJobHistory(user, jobId) {
   const job = await getJobById(user, jobId);
   if (!job) return null;

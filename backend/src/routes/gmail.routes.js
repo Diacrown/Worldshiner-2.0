@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireHqOrAdmin } from '../middleware/auth.js';
 import * as GmailService from '../services/gmail.service.js';
+import { matchJobByText } from '../services/jobs.service.js';
 
 export const gmailRouter = Router();
 
@@ -45,6 +46,22 @@ gmailRouter.get('/callback', async (req, res) => {
 gmailRouter.get('/inquiries', requireAuth, requireHqOrAdmin, async (req, res, next) => {
   try {
     res.json(await GmailService.searchInquiries(req.user.officeId, req.query.q));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Recent inbox messages, each with a best-guess job match (by PO number) so
+// staff can either drop a reply straight into that job's chat, or — if
+// nothing matched — use it to pre-fill a new job.
+gmailRouter.get('/inbox', requireAuth, requireHqOrAdmin, async (req, res, next) => {
+  try {
+    const messages = await GmailService.listInboxCandidates(req.user.officeId);
+    const withMatches = await Promise.all(messages.map(async (m) => ({
+      ...m,
+      matchedJob: await matchJobByText(req.user, `${m.subject}\n${m.body}`),
+    })));
+    res.json({ messages: withMatches });
   } catch (err) {
     next(err);
   }
