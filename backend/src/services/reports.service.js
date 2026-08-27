@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { pool } from '../db/pool.js';
 import { buildScope } from './scope.js';
+import { getClientDirectory } from './clients.service.js';
 
 // Per-office monthly summary. "Completed" and "Not Proceeding" are kept as
 // separate counts rather than one collapsed "done" bucket — conflating a
@@ -168,4 +169,95 @@ export async function exportJobsCsv(user, { officeOverride, status, search } = {
     lines.push([r.job_name, r.contact_person, r.priority, r.status_code, r.office_name, r.po_number, r.design_no, r.client_delivery_date, r.created_at].map(escape).join(','));
   }
   return lines.join('\n');
+}
+
+// A step up from the static Monthly Summary: jobs/revenue trend over time,
+// average turnaround per office, and a top-clients leaderboard. Turnaround
+// is measured from job creation to its job_completed status-history event
+// (not just current status_code), same reasoning as getMonthlyOfficeSummary
+// — a job archived last month shouldn't be missing from this because its
+// current status has since changed... except job_completed is a terminal
+// archive status, so in practice it never does; kept consistent anyway.
+export async function getExecutiveDashboard(user, { months = 6 } = {}) {
+  const { where, params } = buildScope(user);
+  const since = new Date();
+  since.setUTCMonth(since.getUTCMonth() - (Math.max(1, Math.min(24, months)) - 1));
+  since.setUTCDate(1);
+  since.setUTCHours(0, 0, 0, 0);
+
+  const trendSql = `
+    SELECT date_trunc('month', j.created_at) AS month, count(*)::int AS job_count,
+           COALESCE(sum(j.invoice_amount), 0)::numeric AS revenue
+    FROM jobs j
+    ${where}
+    ${where ? 'AND' : 'WHERE'} j.created_at >= $${params.length + 1}
+    GROUP BY 1
+    ORDER BY 1
+  `;
+  const { rows: trendRows } = await pool.query(trendSql, [...params, since]);
+
+  // A true "time to complete" turnaround turned out not to be reliably
+  // computable: 448 jobs currently sit at job_completed, and essentially
+  // all of them have exactly one job_status_history row total (the
+  // completion event itself) — the old system's bulk-migrated records
+  // never had intermediate stage timestamps to reconstruct, so there's no
+  // real "start" to measure against for a finished job. jobs.created_at
+  // doesn't fill that gap either: ~1100 of 2855 jobs share one identical
+  // created_at value, which is when the old system's own bulk import into
+  // Firestore ran, not each job's real start date.
+  //
+  // What IS honestly computable: how long currently-open jobs have been
+  // sitting since their earliest tracked stage. Every open job has at
+  // least its current status as a history row, so this doesn't hit the
+  // same sparse-data wall — and it's arguably the more actionable number
+  // for HQ anyway (which office has a backlog right now), vs. a historical
+  // average that can't flag anything currently happening.
+  const turnaroundSql = `
+    WITH job_starts AS (
+      SELECT job_id, MIN(changed_at) AS started_at
+      FROM job_status_history
+      WHERE side = 'branch'
+      GROUP BY job_id
+    )
+    SELECT o.code AS office_code, o.name AS office_name,
+           avg(extract(epoch FROM (now() - js.started_at)) / 86400)::numeric AS avg_open_days,
+           count(*)::int AS open_count
+    FROM jobs j
+    JOIN offices o ON o.id = j.office_id
+    JOIN job_starts js ON js.job_id = j.id
+    ${where}
+    ${where ? 'AND' : 'WHERE'} j.status_code NOT IN ('job_completed', 'not_proceeding')
+    GROUP BY o.code, o.name
+    ORDER BY avg_open_days DESC
+  `;
+  const { rows: turnaroundRows } = await pool.query(turnaroundSql, params);
+
+  // Reuses the Clients page's own directory computation rather than a
+  // separate query — "top clients" is just that same data flattened and
+  // sorted, so it can never drift out of sync with what the Clients page
+  // itself shows.
+  const directory = await getClientDirectory(user);
+  const topClients = [];
+  for (const region of directory) {
+    for (const country of region.countries) {
+      for (const office of country.offices) {
+        for (const client of office.clients) {
+          topClients.push({
+            clientName: client.clientName, officeCode: office.officeCode, officeName: office.officeName,
+            jobCount: client.jobCount, lastActivity: client.lastActivity,
+          });
+        }
+      }
+    }
+  }
+  topClients.sort((a, b) => b.jobCount - a.jobCount);
+
+  return {
+    trend: trendRows.map((r) => ({ month: r.month, jobCount: r.job_count, revenue: Number(r.revenue) })),
+    openJobAgeByOffice: turnaroundRows.map((r) => ({
+      officeCode: r.office_code, officeName: r.office_name,
+      avgOpenDays: r.avg_open_days != null ? Number(r.avg_open_days) : null, openCount: r.open_count,
+    })),
+    topClients: topClients.slice(0, 15),
+  };
 }

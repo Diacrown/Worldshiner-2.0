@@ -305,11 +305,41 @@
         <div id="reportsView" style="display:none">
           <div class="section-head"><div><h2>Reports</h2><p>Ready-made summaries and exports</p></div></div>
           <div class="subtabs">
+            <button class="subtab-btn" data-subtab="repDashboard">Executive Dashboard</button>
             <button class="subtab-btn active" data-subtab="repMonthly">Monthly Summary</button>
             <button class="subtab-btn" data-subtab="repSetterPolisher">Setter/Polisher/Repairer</button>
             <button class="subtab-btn" data-subtab="repOverdue">Overdue</button>
             <button class="subtab-btn" data-subtab="repClientItems">Client Items</button>
             <button class="subtab-btn" data-subtab="repExport">Export</button>
+          </div>
+
+          <div class="subtabpane" id="subtab-repDashboard">
+            <div class="toolbar">
+              <select id="dash_months" style="width:auto">
+                <option value="3">Last 3 months</option>
+                <option value="6" selected>Last 6 months</option>
+                <option value="12">Last 12 months</option>
+              </select>
+              <button class="btn-ghost" id="dash_refreshBtn">Refresh</button>
+            </div>
+            <div class="cli-grid" style="margin-bottom:18px">
+              <div class="cli-card dim" style="cursor:default"><h3>Jobs created</h3><div class="num" id="dash_totalJobs">—</div><p id="dash_periodLabel">this period</p></div>
+              <div class="cli-card dim" style="cursor:default"><h3>Total invoiced</h3><div class="num" id="dash_totalRevenue">—</div><p>this period</p></div>
+            </div>
+            <h3 class="sub" style="font-size:14px;margin-bottom:8px">Jobs &amp; revenue by month</h3>
+            <div class="diagram" style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rad);padding:16px;margin-bottom:20px">
+              <svg id="dash_trendChart" viewBox="0 0 640 220" style="width:100%;height:auto"></svg>
+            </div>
+            <h3 class="sub" style="font-size:14px;margin-bottom:8px">Open jobs by office — average age</h3>
+            <table style="margin-bottom:20px">
+              <thead><tr><th>Office</th><th>Open jobs</th><th>Average age</th></tr></thead>
+              <tbody id="dash_openAgeBody"></tbody>
+            </table>
+            <h3 class="sub" style="font-size:14px;margin-bottom:8px">Top clients</h3>
+            <table>
+              <thead><tr><th>Client</th><th>Office</th><th>Jobs</th><th>Last activity</th></tr></thead>
+              <tbody id="dash_topClientsBody"></tbody>
+            </table>
           </div>
 
           <div class="subtabpane active" id="subtab-repMonthly">
@@ -1033,6 +1063,87 @@ async function loadAlerts() {
     };
   });
 }
+// ---- Executive Dashboard ----
+$('dash_refreshBtn').onclick = () => loadExecutiveDashboard();
+$('dash_months').onchange = () => loadExecutiveDashboard();
+async function loadExecutiveDashboard() {
+  const months = $('dash_months').value;
+  try {
+    const data = await api(`/reports/executive-dashboard?months=${months}`);
+    $('dash_totalJobs').textContent = data.trend.reduce((s, m) => s + m.jobCount, 0);
+    $('dash_totalRevenue').textContent = fmtMoney(data.trend.reduce((s, m) => s + m.revenue, 0));
+    $('dash_periodLabel').textContent = `last ${months} months`;
+    drawTrendChart(data.trend);
+
+    $('dash_openAgeBody').innerHTML = data.openJobAgeByOffice.map(o => `
+      <tr><td>${escapeHtml(o.officeName)}</td><td>${o.openCount}</td><td>${o.avgOpenDays != null ? Math.round(o.avgOpenDays) + ' days' : '—'}</td></tr>
+    `).join('') || '<tr><td colspan="3" class="meta">No open jobs.</td></tr>';
+
+    $('dash_topClientsBody').innerHTML = data.topClients.map(c => `
+      <tr class="clickable-row" data-office="${c.officeCode}" data-client="${escapeHtml(c.clientName)}">
+        <td>${escapeHtml(c.clientName)}</td><td>${escapeHtml(c.officeName)}</td><td>${c.jobCount}</td>
+        <td>${new Date(c.lastActivity).toLocaleDateString()}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="meta">No client data.</td></tr>';
+    $('dash_topClientsBody').querySelectorAll('[data-client]').forEach(row => {
+      row.style.cursor = 'pointer';
+      row.onclick = () => {
+        switchView('clients');
+        openClientJobs(row.dataset.office, row.dataset.client);
+      };
+    });
+  } catch (e) { toast(e.message); }
+}
+function fmtMoney(n) {
+  return '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+function drawTrendChart(trend) {
+  const svg = $('dash_trendChart');
+  const W = 640, H = 220, padL = 46, padR = 46, padT = 14, padB = 30;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  if (!trend.length) { svg.innerHTML = '<text x="320" y="110" text-anchor="middle" fill="var(--text2)" font-size="13">No data for this period.</text>'; return; }
+
+  const maxJobs = Math.max(1, ...trend.map(m => m.jobCount));
+  const maxRevenue = Math.max(1, ...trend.map(m => m.revenue));
+  const barW = chartW / trend.length * 0.5;
+  const slot = chartW / trend.length;
+
+  const bars = trend.map((m, i) => {
+    const h = (m.jobCount / maxJobs) * chartH;
+    const x = padL + i * slot + (slot - barW) / 2;
+    const y = padT + chartH - h;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="var(--gold-bg)" stroke="var(--gold)" stroke-width="1" rx="2"/>
+            <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text2)">${m.jobCount}</text>`;
+  }).join('');
+
+  const linePoints = trend.map((m, i) => {
+    const x = padL + i * slot + slot / 2;
+    const y = padT + chartH - (m.revenue / maxRevenue) * chartH;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const dots = trend.map((m, i) => {
+    const x = padL + i * slot + slot / 2;
+    const y = padT + chartH - (m.revenue / maxRevenue) * chartH;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--gold-dark)"/>`;
+  }).join('');
+
+  const labels = trend.map((m, i) => {
+    const x = padL + i * slot + slot / 2;
+    const d = new Date(m.month);
+    return `<text x="${x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--text2)">${d.toLocaleDateString(undefined, { month: 'short' })}</text>`;
+  }).join('');
+
+  svg.innerHTML = `
+    <line x1="${padL}" y1="${padT + chartH}" x2="${W - padR}" y2="${padT + chartH}" stroke="var(--border)"/>
+    ${bars}
+    <polyline points="${linePoints}" fill="none" stroke="var(--gold-dark)" stroke-width="2"/>
+    ${dots}
+    ${labels}
+    <text x="${padL}" y="${padT - 2}" font-size="10" fill="var(--text2)">Bars: jobs created · Line: revenue invoiced</text>
+  `;
+}
+
 function initReportsView() {
   if (!$('rep_month').value) {
     const now = new Date();
@@ -1278,6 +1389,7 @@ document.querySelectorAll('.navlist [data-view]').forEach(btn => btn.onclick = (
 // Reports (Monthly / Setter-Polisher / Overdue / Client Items / Export).
 const SUBTAB_ENTER = {
   needsAttention: () => loadAlerts(),
+  repDashboard: () => loadExecutiveDashboard(),
   repSetterPolisher: () => loadSetterPolisherReport(),
   repOverdue: () => loadOverdueReport(),
   repClientItems: () => loadClientItemsReport(),
@@ -1627,9 +1739,20 @@ async function openClientJobs(officeCode, clientName) {
   panel.innerHTML = `<p class="meta">Loading ${escapeHtml(clientName)}'s jobs…</p>`;
   try {
     const { jobs } = await api(`/jobs?office=${encodeURIComponent(officeCode)}&clientPrefix=${encodeURIComponent(clientName)}&limit=2000`);
+
+    const totalValue = jobs.reduce((s, j) => s + (Number(j.invoice_amount) || 0), 0);
+    const completedCount = jobs.filter((j) => j.status_code === 'job_completed').length;
+    const lastActivity = jobs.reduce((max, j) => (!max || j.updated_at > max ? j.updated_at : max), null);
+
     panel.innerHTML = `
       <div style="margin-bottom:10px"><button class="btn-ghost btn-sm" id="cli_backToClients">‹ Back to clients</button></div>
-      <h3 style="margin-bottom:10px">${escapeHtml(clientName)} — ${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h3>
+      <h3 style="margin-bottom:4px">${escapeHtml(clientName)}</h3>
+      <div class="role-grid-stats" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="stat-card"><div class="num">${jobs.length}</div><p class="meta">Total jobs</p></div>
+        <div class="stat-card"><div class="num">${totalValue ? fmtMoney(totalValue) : '—'}</div><p class="meta">Total invoiced</p></div>
+        <div class="stat-card"><div class="num">${completedCount}</div><p class="meta">Completed</p></div>
+        <div class="stat-card"><div class="num" style="font-size:15px">${lastActivity ? new Date(lastActivity).toLocaleDateString() : '—'}</div><p class="meta">Last activity</p></div>
+      </div>
       ${jobs.map((j) => `
         <div class="cli-client-row" data-job="${j.id}">
           <div><div class="name">${escapeHtml(j.job_name)}</div><div class="meta">${escapeHtml(j.status_label || j.status_code)}${j.po_number ? ' · PO ' + escapeHtml(j.po_number) : ''}</div></div>

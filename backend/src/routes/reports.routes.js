@@ -62,6 +62,15 @@ reportsRouter.get('/client-items', async (req, res, next) => {
   }
 });
 
+reportsRouter.get('/executive-dashboard', async (req, res, next) => {
+  try {
+    const months = req.query.months ? Number(req.query.months) : undefined;
+    res.json(await ReportsService.getExecutiveDashboard(req.user, { months }));
+  } catch (err) {
+    next(err);
+  }
+});
+
 reportsRouter.get('/export.csv', async (req, res, next) => {
   try {
     const csv = await ReportsService.exportJobsCsv(req.user, { officeOverride: req.query.office, status: req.query.status, search: req.query.search });
