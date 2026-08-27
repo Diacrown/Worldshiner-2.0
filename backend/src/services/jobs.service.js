@@ -359,6 +359,7 @@ const PRODUCTION_FIELD_MAP = {
   stampLogo: 'stamp_logo', stampMetal: 'stamp_metal', stampLoc: 'stamp_loc', vendor: 'vendor',
   finding1: 'finding1', approvalDate: 'approval_date', poDate: 'po_date',
   stoneIssueDate: 'stone_issue_date', deliveryDate: 'delivery_date', cadIssuedTo: 'cad_issued_to',
+  metalWeightGrams: 'metal_weight_grams',
 };
 
 export async function getJobProduction(user, jobId) {

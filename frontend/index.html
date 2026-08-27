@@ -543,6 +543,10 @@
 
     <div class="tabpane" id="tab-production">
       <p class="meta" style="margin-bottom:10px">Manufacturing spec — mostly filled in from historical records or by HQ; branches can add/correct too.</p>
+      <div class="toolbar" style="margin-bottom:10px">
+        <button class="btn-ghost btn-sm" id="pullFromCalculatorBtn" type="button">⤵ Pull from Jwy Calculator</button>
+        <span class="meta" id="pr_calculatorSynced"></span>
+      </div>
       <div class="grid2">
         <div><label>Item Type</label><input id="pr_itemType"></div>
         <div><label>Item Size</label><input id="pr_itemSize"></div>
@@ -550,6 +554,7 @@
         <div><label>Metal Type</label><input id="pr_metalType" placeholder="e.g. 18KT"></div>
         <div><label>Metal Color</label><input id="pr_metalColor" placeholder="e.g. YG"></div>
         <div><label>Alloy Type</label><input id="pr_alloyType"></div>
+        <div><label>Metal Weight (g)</label><input id="pr_metalWeightGrams" type="number" step="0.01"></div>
         <div><label>Rhodium</label><input id="pr_rhodium" placeholder="Yes / No"></div>
         <div><label>Vendor</label><input id="pr_vendor"></div>
         <div class="full"><label>Stone Type</label><input id="pr_stoneType" placeholder="e.g. LGD"></div>
@@ -1945,12 +1950,15 @@ async function loadHistory(jobId) {
 
 // ---- Production tab ----
 const PRODUCTION_DATE_FIELDS = ['inquiryDate','quotationDate','approvalDate','poDate','cadIssued','cadModification','stoneIssueDate','qcReady','qcPass','shipDate','deliveryDate'];
-const PRODUCTION_TEXT_FIELDS = ['itemType','itemSize','qty','metalType','metalColor','alloyType','rhodium','vendor','stoneType','stoneDetails','stoneSource','settingType','finding1','cadIssuedTo','stampLogo','stampMetal','stampLoc'];
+const PRODUCTION_TEXT_FIELDS = ['itemType','itemSize','qty','metalType','metalColor','alloyType','metalWeightGrams','rhodium','vendor','stoneType','stoneDetails','stoneSource','settingType','finding1','cadIssuedTo','stampLogo','stampMetal','stampLoc'];
 async function loadProduction(jobId) {
   const { production } = await api(`/jobs/${jobId}/production`);
-  const colMap = { inquiryDate:'inquiry_date', quotationDate:'quotation_date', approvalDate:'approval_date', poDate:'po_date', cadIssued:'cad_issued', cadModification:'cad_modification', stoneIssueDate:'stone_issue_date', qcReady:'qc_ready', qcPass:'qc_pass', shipDate:'ship_date', deliveryDate:'delivery_date', itemType:'item_type', itemSize:'item_size', qty:'qty', metalType:'metal_type', metalColor:'metal_color', alloyType:'alloy_type', rhodium:'rhodium', vendor:'vendor', stoneType:'stone_type', stoneDetails:'stone_details', stoneSource:'stone_source', settingType:'setting_type', finding1:'finding1', cadIssuedTo:'cad_issued_to', stampLogo:'stamp_logo', stampMetal:'stamp_metal', stampLoc:'stamp_loc' };
+  const colMap = { inquiryDate:'inquiry_date', quotationDate:'quotation_date', approvalDate:'approval_date', poDate:'po_date', cadIssued:'cad_issued', cadModification:'cad_modification', stoneIssueDate:'stone_issue_date', qcReady:'qc_ready', qcPass:'qc_pass', shipDate:'ship_date', deliveryDate:'delivery_date', itemType:'item_type', itemSize:'item_size', qty:'qty', metalType:'metal_type', metalColor:'metal_color', alloyType:'alloy_type', metalWeightGrams:'metal_weight_grams', rhodium:'rhodium', vendor:'vendor', stoneType:'stone_type', stoneDetails:'stone_details', stoneSource:'stone_source', settingType:'setting_type', finding1:'finding1', cadIssuedTo:'cad_issued_to', stampLogo:'stamp_logo', stampMetal:'stamp_metal', stampLoc:'stamp_loc' };
   for (const f of PRODUCTION_DATE_FIELDS) $('pr_' + f).value = production[colMap[f]] ? String(production[colMap[f]]).slice(0, 10) : '';
   for (const f of PRODUCTION_TEXT_FIELDS) $('pr_' + f).value = production[colMap[f]] ?? '';
+  $('pr_calculatorSynced').textContent = production.calculator_quote_ref
+    ? `Last synced from quote "${production.calculator_quote_ref}" on ${new Date(production.calculator_synced_at).toLocaleDateString()}`
+    : '';
 }
 $('saveProductionBtn').onclick = async () => {
   const body = {};
@@ -1958,6 +1966,14 @@ $('saveProductionBtn').onclick = async () => {
   try {
     await api(`/jobs/${CURRENT_JOB_ID}/production`, { method: 'PATCH', body: JSON.stringify(body) });
     toast('Production spec saved.');
+  } catch (e) { toast(e.message); }
+};
+$('pullFromCalculatorBtn').onclick = async () => {
+  try {
+    const result = await api(`/jobs/${CURRENT_JOB_ID}/pull-from-calculator`, { method: 'POST' });
+    if (!result.found) { toast('No saved quote found in the Calculator for this job\'s PO number.'); return; }
+    toast(`Pulled quote "${result.quoteRef}" — ${result.alloyType || 'alloy n/a'}, ${result.metalWeightGrams ?? '?'}g.`);
+    await loadProduction(CURRENT_JOB_ID);
   } catch (e) { toast(e.message); }
 };
 

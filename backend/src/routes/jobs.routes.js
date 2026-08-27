@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireHqOrAdmin, resolveWriteOfficeId } from '../middleware/auth.js';
 import * as JobsService from '../services/jobs.service.js';
 import { getOrCreateTrackingToken, revokeTrackingToken } from '../services/tracking.service.js';
+import { pullQuoteIntoProduction } from '../services/jwyCalculator.service.js';
 
 export const jobsRouter = Router();
 jobsRouter.use(requireAuth);
@@ -38,6 +39,16 @@ jobsRouter.get('/:id', async (req, res, next) => {
     const job = await JobsService.getJobById(req.user, req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     res.json({ job });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.post('/:id/pull-from-calculator', async (req, res, next) => {
+  try {
+    const result = await pullQuoteIntoProduction(req.user, req.params.id);
+    if (result === null) return res.status(404).json({ error: 'Job not found' });
+    res.json(result);
   } catch (err) {
     next(err);
   }
