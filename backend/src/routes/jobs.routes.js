@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireHqOrAdmin, resolveWriteOfficeId } from '../middleware/auth.js';
 import * as JobsService from '../services/jobs.service.js';
+import { getOrCreateTrackingToken, revokeTrackingToken } from '../services/tracking.service.js';
 
 export const jobsRouter = Router();
 jobsRouter.use(requireAuth);
@@ -57,6 +58,26 @@ jobsRouter.patch('/:id/production', async (req, res, next) => {
     const production = await JobsService.updateJobProduction(req.user, req.params.id, req.body || {});
     if (production === null) return res.status(404).json({ error: 'Job not found' });
     res.json({ production });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.post('/:id/tracking-link', async (req, res, next) => {
+  try {
+    const token = await getOrCreateTrackingToken(req.user, req.params.id);
+    if (!token) return res.status(404).json({ error: 'Job not found' });
+    res.json({ token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.delete('/:id/tracking-link', async (req, res, next) => {
+  try {
+    const ok = await revokeTrackingToken(req.user, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Job not found' });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

@@ -19,6 +19,7 @@ import { gmailRouter } from './routes/gmail.routes.js';
 import { officeChatRouter } from './routes/officeChat.routes.js';
 import { alertsRouter } from './routes/alerts.routes.js';
 import { clientsRouter } from './routes/clients.routes.js';
+import { trackRouter } from './routes/track.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -34,6 +35,12 @@ app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/offices', officesRouter);
 app.use('/api/users', usersRouter);
+// Mounted before the bare-'/api' routers below: those apply requireAuth
+// unconditionally to every request that reaches them (router-level .use()
+// with no path), so anything registered after them on the same '/api'
+// prefix — like this public tracking route — would otherwise get gated by
+// their auth check before its own handler is ever reached.
+app.use('/api/track', trackRouter); // public — no requireAuth, see track.routes.js
 app.use('/api', issuesRouter);   // mounts /api/jobs/:jobId/issues and /api/issues/:id
 app.use('/api', chatRouter);     // mounts /api/jobs/:jobId/chat and /api/chat/unread-counts
 app.use('/api', jobItemsRouter); // mounts /api/jobs/:jobId/design-entries and /api/jobs/:jobId/client-items

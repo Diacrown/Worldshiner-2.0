@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Order Tracking — World Shiner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  :root{
+    --bg:oklch(0.9 0.035 30); --s1:oklch(0.97 0.015 60); --s2:oklch(0.93 0.03 35);
+    --gold:oklch(0.42 0.09 35); --gold-dark:oklch(0.32 0.08 35); --onGold:#fff;
+    --text:oklch(0.28 0.03 35); --text2:oklch(0.48 0.03 35); --border:oklch(0.82 0.04 40);
+    --green:oklch(0.4 0.06 130); --orange:oklch(0.55 0.1 55); --red:oklch(0.4 0.09 30);
+    --rad:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',system-ui,sans-serif;min-height:100vh;padding:32px 16px}
+  h1,h2{font-family:'Playfair Display',georgia,serif;font-weight:600}
+  .wrap{max-width:560px;margin:0 auto}
+  .brand{text-align:center;color:var(--gold-dark);font-family:'Playfair Display',georgia,serif;font-size:15px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px}
+  .card{background:var(--s1);border-radius:16px;padding:28px 26px;box-shadow:0 16px 40px rgba(40,20,10,.14);position:relative;overflow:hidden}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,var(--gold-dark),var(--gold),var(--gold-dark))}
+  h2#jobName{font-size:21px;margin-bottom:2px}
+  .office{color:var(--text2);font-size:13px;margin-bottom:22px}
+  .banner{border-radius:var(--rad);padding:12px 14px;font-size:13.5px;font-weight:600;margin-bottom:20px}
+  .banner.hold{background:oklch(0.9 0.06 55);color:var(--orange)}
+  .banner.cancelled{background:oklch(0.9 0.07 30);color:var(--red)}
+  .meta-row{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--text2);margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+  .meta-row b{color:var(--text);font-weight:600;display:block;font-size:14px;margin-top:2px}
+  .timeline{position:relative;padding-left:34px}
+  .step{position:relative;padding-bottom:26px}
+  .step:last-child{padding-bottom:0}
+  .step::before{
+    content:'';position:absolute;left:-27px;top:2px;width:14px;height:14px;border-radius:50%;
+    background:var(--s2);border:2px solid var(--border);
+  }
+  .step.reached::before{background:var(--gold);border-color:var(--gold-dark)}
+  .step::after{content:'';position:absolute;left:-21px;top:18px;bottom:-10px;width:2px;background:var(--border)}
+  .step:last-child::after{display:none}
+  .step.reached::after{background:var(--gold)}
+  .step h3{font-size:14.5px;font-weight:600;margin-bottom:2px}
+  .step.reached h3{color:var(--gold-dark)}
+  .step p{font-size:12.5px;color:var(--text2);margin-bottom:2px}
+  .step .when{font-size:11.5px;color:var(--text2);font-weight:500}
+  .state{text-align:center;padding:60px 20px;color:var(--text2)}
+  .footer-note{text-align:center;font-size:12px;color:var(--text2);margin-top:20px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">World Shiner</div>
+    <div class="card" id="card">
+      <div class="state" id="loadingState">Loading your order status…</div>
+    </div>
+    <p class="footer-note" id="footerNote" style="display:none">Questions about your order? Reply to your original email or WhatsApp thread.</p>
+  </div>
+
+<script>
+async function load() {
+  const token = new URLSearchParams(location.search).get('t');
+  const card = document.getElementById('card');
+  if (!token) { card.innerHTML = '<div class="state">This tracking link is missing its code.</div>'; return; }
+
+  const API_BASE = window.WORLDSHINER_API_BASE || 'http://localhost:4000/api';
+  let data;
+  try {
+    const res = await fetch(`${API_BASE}/track/${encodeURIComponent(token)}`);
+    if (!res.ok) { card.innerHTML = '<div class="state">We couldn\'t find an order for this link. It may have expired — please contact us directly.</div>'; return; }
+    data = await res.json();
+  } catch (e) {
+    card.innerHTML = '<div class="state">Couldn\'t reach the tracking service right now. Please try again shortly.</div>';
+    return;
+  }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const fmt = (d) => d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  let banner = '';
+  if (data.cancelled) banner = `<div class="banner cancelled">This order is not proceeding. Please contact us if you have questions.</div>`;
+  else if (data.onHold) banner = `<div class="banner hold">This order is currently on hold. We'll update this page as soon as it resumes.</div>`;
+
+  const timeline = data.timeline.map((s) => `
+    <div class="step ${s.reached ? 'reached' : ''}">
+      <h3>${esc(s.label)}</h3>
+      <p>${esc(s.description)}</p>
+      ${s.reached && s.reachedAt ? `<div class="when">${fmt(s.reachedAt)}</div>` : ''}
+    </div>`).join('');
+
+  card.innerHTML = `
+    <h2 id="jobName">${esc(data.jobName)}</h2>
+    <div class="office">Handled by ${esc(data.officeName)}</div>
+    ${banner}
+    <div class="meta-row">
+      <div>Order placed<b>${fmt(data.orderedAt)}</b></div>
+      <div style="text-align:right">Current stage<b>${esc(data.currentStageLabel)}</b></div>
+    </div>
+    <div class="timeline">${timeline}</div>
+  `;
+  document.getElementById('footerNote').style.display = 'block';
+  document.title = `${data.jobName} — Order Tracking`;
+}
+load();
+</script>
+</body>
+</html>
