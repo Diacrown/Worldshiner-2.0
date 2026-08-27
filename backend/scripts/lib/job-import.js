@@ -180,8 +180,9 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
        client_stone_semi_mount, setting_charge_confirmed, design_no, in_assay,
        assay_office_name, assay_invoice_no, assay_date_sent, owner_user_id,
        client_comment, client_comment_at, snoozed_until, india_emailed_at, india_email_count,
+       assay_priority, sales_rep, inquiry_sent_at,
        import_batch_id, source_ref, imported_at, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,now(),$29)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,now(),$32)
      RETURNING id`,
     [
       officeId, jobName, job.contact || null, job.clientPhone || null,
@@ -193,6 +194,8 @@ export async function insertJob(client, { officeId, batchId, sourceRef, job, sta
       job.assayOfficeName || null, job.assayInvoiceNo || null, parseDate(job.assayDateSent), ownerUserId,
       job.clientComment || null, parseTimestamp(job.clientCommentAt), parseDate(job.snoozedUntil),
       parseTimestamp(job.indiaEmailedAt), Number(job.indiaEmailCount) || 0,
+      job.assayPriority === 'Yes' ? true : job.assayPriority === 'No' ? false : null,
+      job.salesRep || null, parseDate(job.inquirySentAt),
       batchId, sourceRef, createdAt,
     ]
   );

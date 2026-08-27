@@ -72,6 +72,9 @@ export async function updateJob(user, jobId, input) {
   const assayFieldMap = {
     inAssay: 'in_assay', assayOfficeName: 'assay_office_name',
     assayInvoiceNo: 'assay_invoice_no', assayDateSent: 'assay_date_sent',
+    // Tier 5 field-audit gap — UK-only, so gated the same way as the rest
+    // of this map even though they aren't strictly assay fields themselves.
+    assayPriority: 'assay_priority', salesRep: 'sales_rep', inquirySentAt: 'inquiry_sent_at',
   };
   const touchesAssay = Object.keys(assayFieldMap).some((k) => input[k] !== undefined);
   if (touchesAssay && !user.officeHasAssay) {

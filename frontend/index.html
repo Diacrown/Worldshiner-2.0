@@ -648,6 +648,9 @@
         <div><label>Assay office name</label><input id="assay_officeName"></div>
         <div><label>Invoice number</label><input id="assay_invoiceNo"></div>
         <div><label>Date sent</label><input id="assay_dateSent" type="date"></div>
+        <div><label>Sales rep</label><input id="assay_salesRep"></div>
+        <div><label>Inquiry sent</label><input id="assay_inquirySentAt" type="date"></div>
+        <div class="checkline" style="margin-top:22px"><input type="checkbox" id="assay_priority"><label style="margin:0">Priority inquiry</label></div>
       </div>
       <div class="actions"><button class="btn-primary btn-sm" id="saveAssayBtn">Save assay details</button></div>
     </div>
@@ -2041,12 +2044,17 @@ async function loadAssayTab(jobId) {
   $('assay_officeName').value = job.assay_office_name || '';
   $('assay_invoiceNo').value = job.assay_invoice_no || '';
   $('assay_dateSent').value = job.assay_date_sent ? job.assay_date_sent.slice(0,10) : '';
+  $('assay_salesRep').value = job.sales_rep || '';
+  $('assay_inquirySentAt').value = job.inquiry_sent_at ? job.inquiry_sent_at.slice(0,10) : '';
+  $('assay_priority').checked = !!job.assay_priority;
 }
 $('saveAssayBtn').onclick = async () => {
   try {
     await api(`/jobs/${CURRENT_JOB_ID}`, { method: 'PATCH', body: JSON.stringify({
       inAssay: $('assay_inAssay').checked, assayOfficeName: $('assay_officeName').value.trim(),
       assayInvoiceNo: $('assay_invoiceNo').value.trim(), assayDateSent: $('assay_dateSent').value || null,
+      salesRep: $('assay_salesRep').value.trim(), inquirySentAt: $('assay_inquirySentAt').value || null,
+      assayPriority: $('assay_priority').checked,
     })});
     toast('Assay details saved.'); await loadJobs();
   } catch (e) { toast(e.message); }
