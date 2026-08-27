@@ -7,12 +7,13 @@ jobsRouter.use(requireAuth);
 
 jobsRouter.get('/', async (req, res, next) => {
   try {
-    const { office, view, status, search, limit, offset } = req.query;
+    const { office, view, status, search, clientPrefix, limit, offset } = req.query;
     const jobs = await JobsService.listJobs(req.user, {
       officeOverride: office,
       ownerView: view,
       status,
       search,
+      clientPrefix,
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });

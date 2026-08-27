@@ -160,6 +160,37 @@
   .loading-row td{color:var(--text2);font-style:italic;text-align:center;padding:24px}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--gold-dark);outline-offset:1px}
   button:focus-visible{outline:2px solid var(--gold-dark);outline-offset:2px}
+
+  /* ---- Clients (region globe) ---- */
+  #cli_globeWrap{background:radial-gradient(circle at 35% 30%,oklch(0.4 0.05 40),oklch(0.16 0.02 40));border-radius:16px;padding:18px 0;margin-bottom:18px;box-shadow:0 10px 30px rgba(20,10,5,.25);display:flex;justify-content:center}
+  #cli_globe{width:100%;max-width:420px;height:auto;cursor:grab}
+  #cli_globe:active{cursor:grabbing}
+  .cli-globe-grid{fill:none;stroke:oklch(0.75 0.05 55 / .22);stroke-width:.6}
+  .cli-globe-outline{fill:oklch(0.5 0.06 45 / .35);stroke:var(--gold);stroke-width:1}
+  .cli-marker{cursor:pointer}
+  .cli-marker circle.dot{fill:var(--gold);stroke:oklch(0.99 0.01 60);stroke-width:1.4;transition:r .15s ease,fill .15s ease}
+  .cli-marker:hover circle.dot,.cli-marker.selected circle.dot{fill:oklch(0.7 0.13 55)}
+  .cli-marker text{fill:oklch(0.97 0.01 60);font-size:10px;font-weight:700;font-family:'IBM Plex Sans',system-ui,sans-serif;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .cli-marker .cli-count{fill:oklch(0.85 0.04 55);font-size:8px;font-weight:500;pointer-events:none}
+
+  .cli-breadcrumb{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--text2)}
+  .cli-breadcrumb button{background:none;padding:2px 4px;font-weight:600;color:var(--gold-dark)}
+  .cli-breadcrumb button:hover{text-decoration:underline}
+  .cli-breadcrumb .sep{opacity:.5}
+
+  .cli-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .cli-card{background:var(--s1);border-radius:var(--rad);padding:16px;box-shadow:0 4px 14px rgba(40,20,10,.08);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;border:1px solid transparent}
+  .cli-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(40,20,10,.14);border-color:var(--gold-bg)}
+  .cli-card h3{font-size:15px;margin-bottom:4px;color:var(--text)}
+  .cli-card p{font-size:12px;color:var(--text2)}
+  .cli-card .num{font-size:20px;font-weight:700;color:var(--gold-dark);font-family:'Playfair Display',georgia,serif;margin:6px 0 2px}
+  .cli-card.dim{opacity:.45;cursor:default}
+  .cli-card.dim:hover{transform:none;box-shadow:0 4px 14px rgba(40,20,10,.08);border-color:transparent}
+
+  .cli-client-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--s1);border-radius:var(--rad);margin-bottom:6px;cursor:pointer;transition:background .12s ease}
+  .cli-client-row:hover{background:var(--s2)}
+  .cli-client-row .name{font-weight:600;font-size:13px}
+  .cli-client-row .meta{font-size:11px;color:var(--text2)}
 </style>
 </head>
 <body>
@@ -201,6 +232,7 @@
       <div class="sidebar-brand"><span class="brand">World Shiner</span><button id="sidebarToggle" title="Collapse">☰</button></div>
       <nav class="navlist">
         <button data-view="jobs" class="nav-item active"><span>Jobs</span></button>
+        <button data-view="clients" class="nav-item" style="display:none"><span>Clients</span></button>
         <button data-view="sla" class="nav-item" style="display:none"><span>Alerts</span></button>
         <button data-view="reports" class="nav-item" style="display:none"><span>Reports</span></button>
         <button data-view="staff" class="nav-item" style="display:none"><span>Staff</span></button>
@@ -349,6 +381,21 @@
             </div>
             <div class="actions"><button class="btn-primary btn-sm" id="mail_sendBtn">Send</button></div>
           </div>
+        </div>
+
+        <div id="clientsView" style="display:none">
+          <div class="section-head"><div><h2>Clients</h2><p>Search and browse clients by region and branch office</p></div></div>
+          <div class="toolbar">
+            <input type="text" id="cli_search" placeholder="Search a client by name…">
+          </div>
+          <div id="cli_searchResults" style="display:none;margin-bottom:16px"></div>
+
+          <div id="cli_globeWrap">
+            <svg id="cli_globe" viewBox="0 0 320 320"></svg>
+          </div>
+
+          <div id="cli_breadcrumb" class="cli-breadcrumb"></div>
+          <div id="cli_panel"></div>
         </div>
 
         <div id="staffView" style="display:none">
@@ -866,6 +913,7 @@ async function showApp() {
   document.querySelector('[data-view="reports"]').style.display = isHqOrAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="mail"]').style.display = isHqOrAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="sla"]').style.display = 'flex';
+  document.querySelector('[data-view="clients"]').style.display = 'flex';
   const hasAssay = !!USER.officeHasAssay;
   $('assayTabBtn').style.display = hasAssay ? 'inline-block' : 'none';
   $('batchAssayBtn').style.display = hasAssay ? 'inline-block' : 'none';
@@ -879,6 +927,7 @@ async function showApp() {
 // ---- Nav ----
 const VIEWS = {
   jobs: { onEnter: () => {} },
+  clients: { onEnter: () => initClientsView() },
   sla: { onEnter: () => loadSlaAlerts() },
   reports: { onEnter: () => initReportsView() },
   staff: { onEnter: () => { loadStaff(); loadInvites(); } },
@@ -1142,6 +1191,268 @@ document.querySelectorAll('.subtab-btn').forEach(btn => {
     SUBTAB_ENTER[btn.dataset.subtab]?.();
   };
 });
+
+// ---- Clients (region globe + drill-down) ----
+// Regions/offices have no lat/lng or country column in the DB — this mirrors
+// backend/src/services/regions.js's static taxonomy purely for the globe
+// layout. Client identity itself isn't a DB entity either (see
+// clients.service.js) — it's a best-effort grouping derived from job_name,
+// so counts here are "distinct name prefixes", not a verified client list.
+let CLI_DATA = null;       // last /clients response, cached for client-side search
+let CLI_ROTATION = 0;      // current globe rotation, degrees of longitude
+let CLI_SPIN_TIMER = null;
+let CLI_STATE = { region: null, country: null, office: null };
+
+async function initClientsView() {
+  if (!CLI_DATA) {
+    $('cli_panel').innerHTML = '<p class="meta">Loading…</p>';
+    try { CLI_DATA = await api('/clients'); }
+    catch (e) { $('cli_panel').innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; return; }
+  }
+  CLI_STATE = { region: null, country: null, office: null };
+  renderGlobe();
+  renderBreadcrumb();
+  renderClientsPanel();
+  startGlobeSpin();
+}
+
+function startGlobeSpin() {
+  clearInterval(CLI_SPIN_TIMER);
+  CLI_SPIN_TIMER = setInterval(() => {
+    if (CLI_STATE.region) return; // stop drifting once a region is focused
+    CLI_ROTATION = (CLI_ROTATION + 0.25) % 360;
+    drawGlobeMarkers();
+  }, 40);
+}
+
+// Orthographic projection: a marker at (lat,lng) projects onto the visible
+// disc of a sphere rotating around the vertical axis by CLI_ROTATION
+// degrees. depth < 0 means it's on the far side (rendered faint/behind).
+function projectGlobe(lat, lng, R, cx, cy) {
+  const lngRel = ((lng - CLI_ROTATION) * Math.PI) / 180;
+  const latRad = (lat * Math.PI) / 180;
+  const x = cx + R * Math.cos(latRad) * Math.sin(lngRel);
+  const y = cy - R * Math.sin(latRad);
+  const depth = Math.cos(latRad) * Math.cos(lngRel);
+  return { x, y, depth };
+}
+
+function renderGlobe() {
+  const svg = $('cli_globe');
+  const R = 130, cx = 160, cy = 160;
+  let gridPaths = '';
+  // Meridians (vertical great-circle slices) every 30deg of longitude.
+  for (let lng = 0; lng < 360; lng += 30) {
+    let d = '';
+    for (let lat = -90; lat <= 90; lat += 6) {
+      const p = projectGlobe(lat, lng, R, cx, cy);
+      d += (d ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
+    }
+    gridPaths += `<path class="cli-globe-grid" d="${d}"/>`;
+  }
+  // Parallels (latitude rings) every 30deg.
+  for (let lat = -60; lat <= 60; lat += 30) {
+    let d = '';
+    for (let lng = 0; lng <= 360; lng += 6) {
+      const p = projectGlobe(lat, lng, R, cx, cy);
+      d += (d ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
+    }
+    gridPaths += `<path class="cli-globe-grid" d="${d}"/>`;
+  }
+  svg.innerHTML = `<circle class="cli-globe-outline" cx="${cx}" cy="${cy}" r="${R}"/>${gridPaths}<g id="cli_markers"></g>`;
+  drawGlobeMarkers();
+}
+
+function drawGlobeMarkers() {
+  const g = $('cli_markers');
+  if (!g) return;
+  const R = 130, cx = 160, cy = 160;
+  const regions = CLI_DATA?.regions || [];
+  const markers = regions.map((r) => {
+    const p = projectGlobe(r.lat, r.lng, R, cx, cy);
+    return { region: r, ...p };
+  }).sort((a, b) => a.depth - b.depth); // draw back-to-front
+
+  g.innerHTML = markers.map((m) => {
+    const front = m.depth > -0.15;
+    if (!front) return '';
+    const opacity = Math.max(0.35, m.depth + 0.4);
+    const selected = CLI_STATE.region === m.region.id ? ' selected' : '';
+    const rr = 5 + m.depth * 3;
+    return `
+      <g class="cli-marker${selected}" data-region="${m.region.id}" style="opacity:${opacity.toFixed(2)}" transform="translate(${m.x.toFixed(1)},${m.y.toFixed(1)})">
+        <circle class="dot" r="${rr.toFixed(1)}"/>
+        <text y="-10" text-anchor="middle">${escapeHtml(m.region.label)}</text>
+        <text class="cli-count" y="18" text-anchor="middle">${m.region.jobCount} jobs</text>
+      </g>`;
+  }).join('');
+
+  g.querySelectorAll('[data-region]').forEach((el) => {
+    el.onclick = () => selectRegion(el.dataset.region);
+  });
+}
+
+function selectRegion(regionId) {
+  clearInterval(CLI_SPIN_TIMER);
+  const region = CLI_DATA.regions.find((r) => r.id === regionId);
+  if (!region) return;
+  CLI_STATE = { region: regionId, country: null, office: null };
+  // Smoothly rotate the globe to bring the region's longitude to front-center.
+  const target = ((region.lng % 360) + 360) % 360;
+  const start = CLI_ROTATION;
+  let delta = target - start;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  const steps = 20;
+  let i = 0;
+  const anim = setInterval(() => {
+    i += 1;
+    CLI_ROTATION = (start + (delta * i) / steps + 360) % 360;
+    drawGlobeMarkers();
+    if (i >= steps) clearInterval(anim);
+  }, 16);
+  renderBreadcrumb();
+  renderClientsPanel();
+}
+
+function renderBreadcrumb() {
+  const parts = [`<button id="cli_crumbRoot">All regions</button>`];
+  const region = CLI_DATA?.regions.find((r) => r.id === CLI_STATE.region);
+  if (region) parts.push(`<span class="sep">›</span><button data-crumb="region">${escapeHtml(region.label)}</button>`);
+  const country = region?.countries.find((c) => c.name === CLI_STATE.country);
+  if (country) parts.push(`<span class="sep">›</span><button data-crumb="country">${escapeHtml(country.name)}</button>`);
+  const office = country?.offices.find((o) => o.officeCode === CLI_STATE.office);
+  if (office) parts.push(`<span class="sep">›</span><span>${escapeHtml(office.officeName)}</span>`);
+  $('cli_breadcrumb').innerHTML = parts.join('');
+  $('cli_crumbRoot').onclick = () => { CLI_STATE = { region: null, country: null, office: null }; renderBreadcrumb(); renderClientsPanel(); startGlobeSpin(); };
+  const crumbRegion = $('cli_breadcrumb').querySelector('[data-crumb="region"]');
+  if (crumbRegion) crumbRegion.onclick = () => { CLI_STATE.country = null; CLI_STATE.office = null; renderBreadcrumb(); renderClientsPanel(); };
+  const crumbCountry = $('cli_breadcrumb').querySelector('[data-crumb="country"]');
+  if (crumbCountry) crumbCountry.onclick = () => { CLI_STATE.office = null; renderBreadcrumb(); renderClientsPanel(); };
+}
+
+function renderClientsPanel() {
+  const panel = $('cli_panel');
+  const region = CLI_DATA?.regions.find((r) => r.id === CLI_STATE.region);
+
+  if (!region) {
+    panel.innerHTML = `<div class="cli-grid">${(CLI_DATA?.regions || []).map((r) => `
+      <div class="cli-card" data-region="${r.id}">
+        <h3>${escapeHtml(r.label)}</h3>
+        <p>${escapeHtml(r.officeType)}</p>
+        <div class="num">${r.jobCount}</div>
+        <p>jobs across ${r.countries.length} ${r.countries.length === 1 ? 'country' : 'countries'}</p>
+      </div>`).join('')}</div>`;
+    panel.querySelectorAll('[data-region]').forEach((el) => el.onclick = () => selectRegion(el.dataset.region));
+    staggerIn(panel, '.cli-card');
+    return;
+  }
+
+  const country = region.countries.find((c) => c.name === CLI_STATE.country);
+  if (!country) {
+    panel.innerHTML = `<div class="cli-grid">${region.countries.map((c) => {
+      const empty = c.offices.length === 0;
+      return `<div class="cli-card${empty ? ' dim' : ''}" ${empty ? '' : `data-country="${escapeHtml(c.name)}"`}>
+        <h3>${escapeHtml(c.name)}</h3>
+        <p>${empty ? 'No office set up yet' : region.officeType}</p>
+        <div class="num">${c.jobCount}</div>
+        <p>${c.offices.length} ${c.offices.length === 1 ? 'office' : 'offices'}</p>
+      </div>`;
+    }).join('')}</div>`;
+    panel.querySelectorAll('[data-country]').forEach((el) => el.onclick = () => {
+      CLI_STATE.country = el.dataset.country; renderBreadcrumb(); renderClientsPanel();
+    });
+    staggerIn(panel, '.cli-card');
+    return;
+  }
+
+  const office = country.offices.find((o) => o.officeCode === CLI_STATE.office);
+  if (!office) {
+    panel.innerHTML = `<div class="cli-grid">${country.offices.map((o) => `
+      <div class="cli-card" data-office="${o.officeCode}">
+        <h3>${escapeHtml(o.officeName)}</h3>
+        <p>${o.clients.length} clients</p>
+        <div class="num">${o.jobCount}</div>
+        <p>jobs</p>
+      </div>`).join('')}</div>`;
+    panel.querySelectorAll('[data-office]').forEach((el) => el.onclick = () => {
+      CLI_STATE.office = el.dataset.office; renderBreadcrumb(); renderClientsPanel();
+    });
+    staggerIn(panel, '.cli-card');
+    return;
+  }
+
+  if (!office.clients.length) {
+    panel.innerHTML = '<p class="meta">No jobs recorded for this office yet.</p>';
+    return;
+  }
+  panel.innerHTML = office.clients.map((c) => `
+    <div class="cli-client-row" data-client="${escapeHtml(c.clientName)}" data-office="${office.officeCode}">
+      <div><div class="name">${escapeHtml(c.clientName)}</div><div class="meta">Last activity ${new Date(c.lastActivity).toLocaleDateString()}</div></div>
+      <div class="meta">${c.jobCount} ${c.jobCount === 1 ? 'job' : 'jobs'} ›</div>
+    </div>`).join('');
+  panel.querySelectorAll('[data-client]').forEach((el) => {
+    el.onclick = () => openClientJobs(el.dataset.office, el.dataset.client);
+  });
+  staggerIn(panel, '.cli-client-row');
+}
+
+async function openClientJobs(officeCode, clientName) {
+  const panel = $('cli_panel');
+  panel.innerHTML = `<p class="meta">Loading ${escapeHtml(clientName)}'s jobs…</p>`;
+  try {
+    const { jobs } = await api(`/jobs?office=${encodeURIComponent(officeCode)}&clientPrefix=${encodeURIComponent(clientName)}&limit=2000`);
+    panel.innerHTML = `
+      <div style="margin-bottom:10px"><button class="btn-ghost btn-sm" id="cli_backToClients">‹ Back to clients</button></div>
+      <h3 style="margin-bottom:10px">${escapeHtml(clientName)} — ${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h3>
+      ${jobs.map((j) => `
+        <div class="cli-client-row" data-job="${j.id}">
+          <div><div class="name">${escapeHtml(j.job_name)}</div><div class="meta">${escapeHtml(j.status_label || j.status_code)}${j.po_number ? ' · PO ' + escapeHtml(j.po_number) : ''}</div></div>
+          <div class="meta">${j.client_delivery_date ? new Date(j.client_delivery_date).toLocaleDateString() : ''} ›</div>
+        </div>`).join('')}
+    `;
+    $('cli_backToClients').onclick = () => renderClientsPanel();
+    panel.querySelectorAll('[data-job]').forEach((el) => el.onclick = () => openJobDetail(Number(el.dataset.job)));
+    staggerIn(panel, '.cli-client-row');
+  } catch (e) { panel.innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; }
+}
+
+// Free-text search across every client name in every region/office currently
+// visible to this user (client-side over the already-fetched directory —
+// the whole dataset is small, so no extra API round-trip per keystroke).
+$('cli_search').addEventListener('input', debounce(() => runClientSearch($('cli_search').value.trim()), 150));
+function runClientSearch(term) {
+  const box = $('cli_searchResults');
+  if (!term || !CLI_DATA) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const needle = term.toUpperCase();
+  const hits = [];
+  for (const region of CLI_DATA.regions) {
+    for (const country of region.countries) {
+      for (const office of country.offices) {
+        for (const client of office.clients) {
+          if (client.clientName.includes(needle)) {
+            hits.push({ region, country, office, client });
+          }
+        }
+      }
+    }
+  }
+  hits.sort((a, b) => b.client.jobCount - a.client.jobCount);
+  box.style.display = 'block';
+  if (!hits.length) { box.innerHTML = '<p class="meta">No clients match.</p>'; return; }
+  box.innerHTML = hits.slice(0, 30).map((h) => `
+    <div class="cli-client-row" data-office="${h.office.officeCode}" data-client="${escapeHtml(h.client.clientName)}">
+      <div><div class="name">${escapeHtml(h.client.clientName)}</div><div class="meta">${escapeHtml(h.office.officeName)} · ${escapeHtml(h.region.label)}</div></div>
+      <div class="meta">${h.client.jobCount} ${h.client.jobCount === 1 ? 'job' : 'jobs'} ›</div>
+    </div>`).join('');
+  box.querySelectorAll('[data-client]').forEach((el) => {
+    el.onclick = () => {
+      $('cli_search').value = ''; box.style.display = 'none'; box.innerHTML = '';
+      openClientJobs(el.dataset.office, el.dataset.client);
+    };
+  });
+}
+
 $('sidebarToggle').onclick = () => {
   $('sidebar').classList.toggle('collapsed');
   localStorage.setItem('ws2_sidebar_collapsed', $('sidebar').classList.contains('collapsed') ? '1' : '0');

@@ -3,7 +3,7 @@ import { getBranchToHqStatus, getHqToBranchHeadline, getBranchStatus } from './s
 import { jobNeedsSettingCharge, evaluateSettingChargeGuard } from './settingChargeGuard.js';
 import { buildScope } from './scope.js';
 
-export async function listJobs(user, { officeOverride, ownerView, status, search, limit = 100, offset = 0 } = {}) {
+export async function listJobs(user, { officeOverride, ownerView, status, search, clientPrefix, limit = 100, offset = 0 } = {}) {
   const { where, params } = buildScope(user, { officeOverride, ownerView });
   let sql = `
     SELECT j.*, o.code AS office_code, o.name AS office_name, bs.label AS status_label
@@ -20,6 +20,14 @@ export async function listJobs(user, { officeOverride, ownerView, status, search
   if (search) {
     params.push(`%${search}%`);
     extra.push(`(j.job_name ILIKE $${params.length} OR j.contact_person ILIKE $${params.length} OR j.po_number ILIKE $${params.length})`);
+  }
+  if (clientPrefix) {
+    // Exact match against the Clients page's grouping key (see
+    // clients.service.js deriveClientKey) — escaped so a client name that
+    // happens to contain % or _ can't widen the match.
+    const escaped = clientPrefix.replace(/[\\%_]/g, '\\$&');
+    params.push(`${escaped}%`);
+    extra.push(`j.job_name ILIKE $${params.length} ESCAPE '\\'`);
   }
   if (extra.length) sql += (where ? ' AND ' : ' WHERE ') + extra.join(' AND ');
 
