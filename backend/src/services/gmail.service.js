@@ -28,6 +28,37 @@ export async function getStatus(officeId) {
   return { configured: true, connected: rows.length > 0, googleEmail: rows[0]?.google_email || null };
 }
 
+// Each office connects its own mailbox independently (see gmail_oauth_tokens
+// — keyed by office_id from the start), so HQ reviewing mail across every
+// office needs to see which offices are actually connected before it can
+// fetch anything. Scoped to the caller's own org, matching buildScope's own
+// org-level default for HQ/org-admin visibility everywhere else.
+export async function getStatusByOffice(orgId) {
+  const configured = isGoogleConfigured();
+  const { rows: offices } = await pool.query(
+    `SELECT o.id, o.code, o.name, t.google_email
+     FROM offices o LEFT JOIN gmail_oauth_tokens t ON t.office_id = o.id
+     WHERE o.org_id = $1 AND o.active = TRUE ORDER BY o.is_hq DESC, o.name`,
+    [orgId]
+  );
+  return offices.map((o) => ({
+    officeCode: o.code, officeName: o.name,
+    connected: configured && !!o.google_email, googleEmail: o.google_email || null,
+  }));
+}
+
+// Which offices (within orgId) currently have a live connection — used to
+// know which mailboxes are actually worth fetching for the inbox-review
+// aggregate, instead of trying every office and eating an auth failure for
+// each unconnected one.
+export async function listConnectedOfficeIds(orgId) {
+  const { rows } = await pool.query(
+    `SELECT o.id, o.code, o.name FROM gmail_oauth_tokens t JOIN offices o ON o.id = t.office_id WHERE o.org_id = $1`,
+    [orgId]
+  );
+  return rows.map((r) => ({ officeId: r.id, officeCode: r.code, officeName: r.name }));
+}
+
 // The OAuth callback is hit directly by Google redirecting the user's
 // browser — it can't carry an Authorization header the way every other
 // route does. This signs the acting user/office into a short-lived JWT

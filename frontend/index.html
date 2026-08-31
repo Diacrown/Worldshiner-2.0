@@ -410,7 +410,17 @@
         </div>
         <div id="mailView" style="display:none">
           <h2 style="font-size:16px;margin-bottom:12px">Mail</h2>
+          <p class="meta" style="margin-bottom:10px">Each office connects and manages its own mailbox — this section is your own office's connection.</p>
           <div id="mail_status" class="sheet" style="max-width:none;padding:16px;margin-bottom:16px"></div>
+
+          <div id="mail_allOfficesSection" style="display:none;margin-bottom:20px">
+            <h2 style="font-size:15px;margin-bottom:8px">Every office's mailbox</h2>
+            <table>
+              <thead><tr><th>Office</th><th>Status</th></tr></thead>
+              <tbody id="mail_allOfficesBody"></tbody>
+            </table>
+          </div>
+
           <div id="mail_actions" style="display:none">
             <div class="grid2">
               <div class="full"><label>To</label><input id="mail_to"></div>
@@ -426,7 +436,7 @@
               <span class="spacer"></span>
               <button class="btn-ghost btn-sm" id="mail_checkInboxBtn">Check inbox</button>
             </div>
-            <p class="meta" style="margin-bottom:12px">Recent messages from the last 30 days, matched against open jobs by PO number where possible.</p>
+            <p class="meta" style="margin-bottom:12px" id="mail_inboxHint">Recent messages from the last 30 days, matched against open jobs by PO number where possible.</p>
             <div id="mail_inboxList"></div>
           </div>
         </div>
@@ -983,11 +993,15 @@ async function showApp() {
   const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq;
   const isAdmin = USER.isGlobalAdmin || USER.isOrgAdmin;
   const isHqOrAdmin = isAdmin || USER.officeIsHq;
+  const canManageOwnMail = isHqOrAdmin || USER.isOfficeMaster;
   $('officeSwitcher').style.display = canSwitch ? 'inline-block' : 'none';
   document.querySelector('[data-view="staff"]').style.display = isAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="import"]').style.display = isAdmin ? 'flex' : 'none';
   document.querySelector('[data-view="reports"]').style.display = isHqOrAdmin ? 'flex' : 'none';
-  document.querySelector('[data-view="mail"]').style.display = isHqOrAdmin ? 'flex' : 'none';
+  // Every office manages its own mailbox now (not just HQ/admin) — an
+  // office master at a branch can connect and review their own office's
+  // inbox; HQ/org/global admin additionally sees every office's inbox.
+  document.querySelector('[data-view="mail"]').style.display = canManageOwnMail ? 'flex' : 'none';
   document.querySelector('[data-view="sla"]').style.display = 'flex';
   document.querySelector('[data-view="clients"]').style.display = 'flex';
   $('cli_mergeToolBtn').style.display = isHqOrAdmin ? 'inline-block' : 'none';
@@ -1292,16 +1306,19 @@ $('imp_commitBtn').onclick = async () => {
 };
 $('imp_doneBtn').onclick = importReset;
 async function loadMailStatus() {
+  const isHqOrAdmin = USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq;
   try {
     const status = await api('/gmail/status');
     if (!status.configured) {
       $('mail_status').innerHTML = `<b>Not configured.</b> This office admin needs to add Google Cloud OAuth credentials (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI) to the server's .env before Gmail features work.`;
       $('mail_actions').style.display = 'none';
       $('mail_inboxSection').style.display = 'none';
-    } else if (!status.connected) {
+      $('mail_allOfficesSection').style.display = 'none';
+      return;
+    }
+    if (!status.connected) {
       $('mail_status').innerHTML = `<b>Not connected.</b> <button class="btn-primary btn-sm" id="mail_connectBtn" style="margin-left:8px">Connect Gmail</button>`;
       $('mail_actions').style.display = 'none';
-      $('mail_inboxSection').style.display = 'none';
       $('mail_connectBtn').onclick = async () => {
         try { const { authUrl } = await api('/gmail/connect'); window.location.href = authUrl; }
         catch (e) { toast(e.message); }
@@ -1309,13 +1326,29 @@ async function loadMailStatus() {
     } else {
       $('mail_status').innerHTML = `<b>Connected</b> as ${escapeHtml(status.googleEmail || 'unknown')}. <button class="btn-ghost btn-sm" id="mail_disconnectBtn" style="margin-left:8px">Disconnect</button>`;
       $('mail_actions').style.display = 'block';
-      $('mail_inboxSection').style.display = 'block';
       $('mail_disconnectBtn').onclick = async () => {
         try { await api('/gmail/disconnect', { method: 'DELETE' }); await loadMailStatus(); }
         catch (e) { toast(e.message); }
       };
     }
+    // HQ/org/global admin can review every office's inbox even if their own
+    // office's mailbox isn't connected — a branch user only gets the inbox
+    // once their own office is.
+    $('mail_inboxSection').style.display = (status.connected || isHqOrAdmin) ? 'block' : 'none';
+    $('mail_inboxHint').textContent = isHqOrAdmin
+      ? 'Recent messages from every connected office\'s mailbox, tagged by office, matched against jobs by PO number where possible.'
+      : 'Recent messages from the last 30 days, matched against open jobs by PO number where possible.';
+    if (isHqOrAdmin) await loadAllOfficesStatus();
   } catch (e) { $('mail_status').textContent = e.message; }
+}
+async function loadAllOfficesStatus() {
+  $('mail_allOfficesSection').style.display = 'block';
+  try {
+    const { offices } = await api('/gmail/status-by-office');
+    $('mail_allOfficesBody').innerHTML = offices.map(o => `
+      <tr><td>${escapeHtml(o.officeName)}</td><td>${o.connected ? `Connected as ${escapeHtml(o.googleEmail)}` : '<span class="meta">Not connected</span>'}</td></tr>
+    `).join('');
+  } catch (e) { $('mail_allOfficesBody').innerHTML = `<tr><td colspan="2" class="meta">${escapeHtml(e.message)}</td></tr>`; }
 }
 $('mail_sendBtn').onclick = async () => {
   try {
@@ -1340,7 +1373,7 @@ $('mail_checkInboxBtn').onclick = async () => {
     list.innerHTML = messages.map((m, i) => `
       <div class="cli-client-row" style="cursor:default;align-items:flex-start;flex-direction:column;gap:6px">
         <div style="display:flex;justify-content:space-between;width:100%">
-          <div><div class="name">${escapeHtml(m.subject || '(no subject)')}</div><div class="meta">${escapeHtml(senderDisplayName(m.from))} · ${escapeHtml(m.date || '')}</div></div>
+          <div><div class="name">${escapeHtml(m.subject || '(no subject)')}</div><div class="meta">${escapeHtml(senderDisplayName(m.from))} · ${escapeHtml(m.date || '')}${m.officeName ? ' · ' + escapeHtml(m.officeName) : ''}</div></div>
         </div>
         <div class="meta" style="max-width:100%">${escapeHtml((m.snippet || m.body || '').slice(0, 220))}</div>
         <div>
@@ -1367,14 +1400,21 @@ $('mail_checkInboxBtn').onclick = async () => {
     });
   } catch (e) { list.innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; }
 };
+// Set right before opening the New Job overlay from an inbox email, so
+// saveNewJob knows to tag the job to that email's source office rather than
+// the viewer's own — matters for HQ reviewing a branch office's mailbox,
+// since without this the job would land under HQ's own office_id instead
+// of the branch it actually belongs to.
+let NEW_JOB_OFFICE_CODE = null;
 function openNewJobFromEmail(m) {
   const sender = senderDisplayName(m.from);
   $('f_jobName').value = (sender && m.subject) ? `${sender} - ${m.subject}` : (m.subject || sender || '');
   $('f_contact').value = sender;
   $('f_notes').value = `From email (${m.date || 'undated'}):\n${m.body || m.snippet || ''}`.slice(0, 4000);
+  NEW_JOB_OFFICE_CODE = m.officeCode || null;
   switchView('jobs');
   openSheet($('newJobOverlay'));
-  toast('Review the details below, then create the job.');
+  toast(m.officeName ? `Review the details below, then create the job under ${m.officeName}.` : 'Review the details below, then create the job.');
 }
 function switchView(view) {
   document.querySelectorAll('.navlist [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
@@ -1955,8 +1995,8 @@ $('saveBatchAssay').onclick = async () => {
 };
 
 // ---- New job ----
-$('newJobBtn').onclick = () => openSheet($('newJobOverlay'));
-$('cancelNewJob').onclick = () => closeSheet($('newJobOverlay'));
+$('newJobBtn').onclick = () => { NEW_JOB_OFFICE_CODE = null; openSheet($('newJobOverlay')); };
+$('cancelNewJob').onclick = () => { NEW_JOB_OFFICE_CODE = null; closeSheet($('newJobOverlay')); };
 $('saveNewJob').onclick = async () => {
   const jobName = $('f_jobName').value.trim();
   if (!jobName) { toast('Job name is required.'); return; }
@@ -1965,7 +2005,9 @@ $('saveNewJob').onclick = async () => {
       jobName, contactPerson: $('f_contact').value.trim(), clientPhone: $('f_phone').value.trim(),
       priority: $('f_priority').value, clientDeliveryDate: $('f_deliveryDate').value || null,
       poNumber: $('f_po').value.trim(), clientStoneSemiMount: $('f_semiMount').checked, notes: $('f_notes').value.trim(),
+      officeCode: NEW_JOB_OFFICE_CODE || undefined,
     })});
+    NEW_JOB_OFFICE_CODE = null;
     await closeSheet($('newJobOverlay'));
     ['f_jobName','f_contact','f_phone','f_po','f_notes','f_deliveryDate'].forEach(id => $(id).value = '');
     $('f_semiMount').checked = false;
