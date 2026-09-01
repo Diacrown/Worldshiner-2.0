@@ -29,7 +29,7 @@ async function queryWithRetry(text, params, attempts = 4) {
     try {
       return await rawPool.query(text, params);
     } catch (err) {
-      const transient = /Connection terminated|ECONNRESET|timeout/i.test(err.message);
+      const transient = /Connection terminated|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|timeout/i.test(err.message);
       if (!transient || i === attempts - 1) throw err;
       await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
     }
