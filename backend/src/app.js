@@ -38,9 +38,15 @@ app.use('/api/users', usersRouter);
 // Mounted before the bare-'/api' routers below: those apply requireAuth
 // unconditionally to every request that reaches them (router-level .use()
 // with no path), so anything registered after them on the same '/api'
-// prefix — like this public tracking route — would otherwise get gated by
-// their auth check before its own handler is ever reached.
-app.use('/api/track', trackRouter); // public — no requireAuth, see track.routes.js
+// prefix — like these two routes' unauthenticated endpoints — would
+// otherwise get gated by their auth check before its own handler is ever
+// reached. /api/gmail specifically needs this because Google's OAuth
+// redirect hits /api/gmail/callback with no Authorization header at all —
+// this exact bug already bit /api/track once (see the fix a few commits
+// back) and silently broke Gmail's callback the same way since gmailRouter
+// was still registered after issuesRouter/chatRouter/jobItemsRouter below.
+app.use('/api/track', trackRouter);  // public — no requireAuth, see track.routes.js
+app.use('/api/gmail', gmailRouter);  // /callback specifically is public — see gmail.routes.js
 app.use('/api', issuesRouter);   // mounts /api/jobs/:jobId/issues and /api/issues/:id
 app.use('/api', chatRouter);     // mounts /api/jobs/:jobId/chat and /api/chat/unread-counts
 app.use('/api', jobItemsRouter); // mounts /api/jobs/:jobId/design-entries and /api/jobs/:jobId/client-items
@@ -49,7 +55,6 @@ app.use('/api/invite-codes', invitesRouter);
 app.use('/api/sla', slaRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/import', importRouter);
-app.use('/api/gmail', gmailRouter);
 app.use('/api/office-chat', officeChatRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/clients', clientsRouter);
