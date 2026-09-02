@@ -884,12 +884,46 @@ $('loginBtn').onclick = async () => {
     showApp();
   } catch (e) { $('loginErr').textContent = e.message; }
 };
-$('signOutBtn').onclick = () => {
+function signOut(reason) {
   TOKEN = null; USER = null;
   localStorage.removeItem('ws2_token'); localStorage.removeItem('ws2_user');
   $('app').style.display = 'none'; $('loginScreen').style.display = 'flex';
   $('officeChatFab').style.display = 'none'; $('officeChatPanel').classList.remove('open');
-};
+  stopIdleTimer();
+  if (reason) $('loginErr').textContent = reason;
+}
+$('signOutBtn').onclick = () => signOut();
+
+// ---- Idle auto-logout — a shared account left open on a shop-floor
+// terminal is a real risk in a multi-office jewellery tracker, so an
+// inactive session signs itself out rather than staying live indefinitely.
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+let idleTimer = null;
+let lastIdleReset = 0;
+function resetIdleTimer() {
+  if (!TOKEN) return; // listeners stay attached across sign-out; nothing to time out when logged out
+  // mousemove/scroll fire dozens of times a second — only actually rearm
+  // the timer at most once/sec, since that's plenty of resolution for a
+  // 5-minute window and avoids clearTimeout/setTimeout churn on every pixel.
+  const now = Date.now();
+  if (now - lastIdleReset < 1000) return;
+  lastIdleReset = now;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => signOut('You were signed out after 5 minutes of inactivity.'), IDLE_TIMEOUT_MS);
+}
+function stopIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = null;
+}
+let idleListenersAttached = false;
+function startIdleTimer() {
+  resetIdleTimer();
+  if (idleListenersAttached) return; // re-signing-in mid-session shouldn't stack duplicate listeners
+  idleListenersAttached = true;
+  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'].forEach((evt) => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+  });
+}
 
 // ---- Sign up (invite-code gated — never open registration; see backend/src/routes/auth.routes.js) ----
 let AUTH_MODE = 'signin';
@@ -989,6 +1023,7 @@ $('saveChangePassword').onclick = async () => {
 
 async function showApp() {
   $('loginScreen').style.display = 'none'; $('app').style.display = 'block';
+  startIdleTimer();
   $('whoAmI').textContent = `${USER.displayName} · ${USER.officeName}${USER.orgName ? ' · ' + USER.orgName : ''}`;
   const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq;
   const isAdmin = USER.isGlobalAdmin || USER.isOrgAdmin;
