@@ -863,13 +863,30 @@ function escapeHtml(s) {
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}), ...(options.headers || {}) },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) { const err = new Error(body.error || `Request failed (${res.status})`); err.status = res.status; throw err; }
-  return body;
+  // The backend's free hosting tier spins down after ~15 min idle and can
+  // take 30-60s to wake back up on the very next request — every api() call
+  // goes through here, so this one timer covers login, the job list, and
+  // everything else instead of only the login button knowing about it.
+  // Before login there's no toast host worth glancing at (the whole app is
+  // just a blocked login form), so that case gets the persistent loginErr
+  // line instead of a message that would fade in 3.5s while the real wait
+  // is still 30-60s.
+  const wakingMsg = 'Server is waking up after being idle — this can take up to a minute.';
+  const wakingHint = setTimeout(() => {
+    if (!TOKEN) $('loginErr').textContent = wakingMsg;
+    else toast(wakingMsg);
+  }, 4000);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}), ...(options.headers || {}) },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { const err = new Error(body.error || `Request failed (${res.status})`); err.status = res.status; throw err; }
+    return body;
+  } finally {
+    clearTimeout(wakingHint);
+  }
 }
 
 // ---- Auth ----
@@ -877,12 +894,14 @@ $('loginBtn').onclick = async () => {
   $('loginErr').textContent = '';
   const email = $('loginEmail').value.trim(), password = $('loginPassword').value;
   if (!email || !password) { $('loginErr').textContent = 'Enter email and password.'; return; }
+  $('loginBtn').disabled = true; // avoid a double-submit while a slow cold-start request is in flight
   try {
     const { token, user } = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     TOKEN = token; USER = user;
     localStorage.setItem('ws2_token', token); localStorage.setItem('ws2_user', JSON.stringify(user));
     showApp();
   } catch (e) { $('loginErr').textContent = e.message; }
+  finally { $('loginBtn').disabled = false; }
 };
 function signOut(reason) {
   TOKEN = null; USER = null;
