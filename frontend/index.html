@@ -2533,6 +2533,20 @@ $('officeChatSendBtn').onclick = async () => {
   catch (e) { toast(e.message); }
 };
 
+// Gmail's OAuth callback (backend gmail.routes.js) redirects back here with
+// ?gmail=connected or ?gmail=error&message=... — this was previously read
+// by nothing, so a failure (e.g. Google not returning a refresh token) was
+// completely silent. Strip the query string after reading it so a refresh
+// doesn't re-show a stale result.
+(function handleGmailRedirect() {
+  const params = new URLSearchParams(location.search);
+  const gmailResult = params.get('gmail');
+  if (!gmailResult) return;
+  if (gmailResult === 'connected') toast('Gmail connected.');
+  else if (gmailResult === 'error') toast(`Gmail connection failed: ${params.get('message') || 'unknown error'}`);
+  history.replaceState({}, '', location.pathname);
+})();
+
 // ---- Boot ----
 if (TOKEN && USER) showApp().catch(() => { TOKEN = null; USER = null; });
 </script>
