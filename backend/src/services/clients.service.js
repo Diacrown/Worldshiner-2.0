@@ -85,7 +85,10 @@ export async function getClientDirectory(user) {
   }));
 }
 
-function levenshtein(a, b) {
+// Exported for reuse by jobs.service.js's fuzzy inbox matching — same
+// typo-tolerance need, just comparing an email's text against a client name
+// instead of comparing two client names against each other.
+export function levenshtein(a, b) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
   for (let j = 0; j <= b.length; j++) dp[0][j] = j;
   for (let i = 1; i <= a.length; i++) {

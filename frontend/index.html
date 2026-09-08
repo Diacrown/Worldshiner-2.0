@@ -1432,8 +1432,13 @@ $('mail_checkInboxBtn').onclick = async () => {
         <div class="meta" style="max-width:100%">${escapeHtml((m.snippet || m.body || '').slice(0, 220))}</div>
         <div>
           ${m.matchedJob
-            ? `<span class="badge Medium">Matches: ${escapeHtml(m.matchedJob.job_name)} (PO ${escapeHtml(m.matchedJob.po_number)})</span>
-               <button class="btn-primary btn-sm" data-add-chat="${i}" style="margin-left:8px">Add to job chat</button>`
+            ? (() => {
+                const isExact = m.matchedJob.matchConfidence === 'exact';
+                const label = isExact ? 'Matches' : 'Possible match';
+                const poNote = m.matchedJob.po_number ? ` (PO ${escapeHtml(m.matchedJob.po_number)})` : '';
+                return `<span class="badge ${isExact ? 'Low' : 'Medium'}">${label}: ${escapeHtml(m.matchedJob.job_name)}${poNote}</span>
+               <button class="btn-primary btn-sm" data-add-chat="${i}" style="margin-left:8px">Add to job chat</button>`;
+              })()
             : `<button class="btn-ghost btn-sm" data-new-job="${i}">No match — create job from this</button>`}
         </div>
       </div>`).join('');

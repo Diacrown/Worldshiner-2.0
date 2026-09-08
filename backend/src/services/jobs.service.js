@@ -2,6 +2,7 @@ import { pool, withTransaction } from '../db/pool.js';
 import { getBranchToHqStatus, getHqToBranchHeadline, getBranchStatus } from './statusSync.js';
 import { jobNeedsSettingCharge, evaluateSettingChargeGuard } from './settingChargeGuard.js';
 import { buildScope } from './scope.js';
+import { getClientDirectory, levenshtein } from './clients.service.js';
 
 export async function listJobs(user, { officeOverride, ownerView, status, search, clientPrefix, limit = 100, offset = 0 } = {}) {
   const { where, params } = buildScope(user, { officeOverride, ownerView });
@@ -61,7 +62,7 @@ export async function updateJob(user, jobId, input) {
   const fieldMap = {
     jobName: 'job_name', contactPerson: 'contact_person', clientPhone: 'client_phone',
     priority: 'priority', clientDeliveryDate: 'client_delivery_date', poNumber: 'po_number',
-    renderLink: 'render_link', diacrownSsp: 'diacrown_ssp', invoiceAmount: 'invoice_amount',
+    renderLink: 'render_link', diacrownSsp: 'diacrown_ssp',
     notes: 'notes', clientStoneSemiMount: 'client_stone_semi_mount',
     followUpDate: 'follow_up_date', clientComment: 'client_comment',
   };
@@ -83,6 +84,20 @@ export async function updateJob(user, jobId, input) {
     throw err;
   }
   if (touchesAssay) Object.assign(fieldMap, assayFieldMap);
+
+  // Per-field write permission: office-level scoping already controls which
+  // JOBS staff can see/edit, but invoice_amount is pricing data HQ wants
+  // locked down regardless of which office the job belongs to — a branch
+  // master can still see the job and edit everything else on it.
+  const hqOnlyFieldMap = { invoiceAmount: 'invoice_amount' };
+  const touchesHqOnly = Object.keys(hqOnlyFieldMap).some((k) => input[k] !== undefined);
+  const isHqOrAdmin = user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq;
+  if (touchesHqOnly && !isHqOrAdmin) {
+    const err = new Error('Only HQ or an admin can set invoice amount');
+    err.status = 403;
+    throw err;
+  }
+  if (touchesHqOnly) Object.assign(fieldMap, hqOnlyFieldMap);
 
   const sets = [];
   const params = [];
@@ -140,6 +155,15 @@ export async function createJob(user, officeId, input) {
   if (!jobName || !jobName.trim()) {
     const err = new Error('jobName is required');
     err.status = 400;
+    throw err;
+  }
+  // Same invoice_amount restriction as updateJob — otherwise a branch office
+  // could just set it at creation time instead of going through the
+  // (blocked) update path.
+  const isHqOrAdmin = user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq;
+  if (invoiceAmount !== undefined && !isHqOrAdmin) {
+    const err = new Error('Only HQ or an admin can set invoice amount');
+    err.status = 403;
     throw err;
   }
 
@@ -483,6 +507,12 @@ export async function removeJobSpec(user, jobId, specId) {
 // job the caller could already see.
 export async function matchJobByText(user, text) {
   if (!text) return null;
+  const exact = await matchJobByPoNumber(user, text);
+  if (exact) return { ...exact, matchConfidence: 'exact' };
+  return matchJobByClientName(user, text);
+}
+
+async function matchJobByPoNumber(user, text) {
   const { where, params } = buildScope(user);
   const textParamIndex = params.length + 1;
   const sql = `
@@ -496,6 +526,75 @@ export async function matchJobByText(user, text) {
   `;
   const { rows } = await pool.query(sql, [...params, text]);
   return rows[0] || null;
+}
+
+// Fallback for a reply that names the client but doesn't quote their PO
+// number — reuses the same client directory and edit-distance logic already
+// built for the Clients page's duplicate-name merge tool (clients.service.js
+// levenshtein), just comparing an email's text against a known client name
+// instead of comparing two client names against each other.
+async function matchJobByClientName(user, text) {
+  const upperText = text.toUpperCase();
+  const words = upperText.split(/[^A-Z0-9]+/).filter((w) => w.length >= 5);
+  const directory = await getClientDirectory(user);
+
+  let best = null; // { officeCode, clientName, jobCount, confidence }
+  for (const region of directory) {
+    for (const country of region.countries) {
+      for (const office of country.offices) {
+        for (const client of office.clients) {
+          const name = client.clientName;
+          if (name.length < 4) continue; // too short to match reliably, too easy to false-positive
+          // A "client" backed by only one job is more likely a derivation
+          // artifact (deriveClientKey guessed wrong on an oddly-worded job
+          // name — e.g. a job literally named "Order - Sanders of Remuera"
+          // reads as a client called "Order") than a real recurring client.
+          // An inbound email worth fuzzy-matching is presumably about a
+          // repeat client anyway, so this both fixes false positives and
+          // matches the actual use case.
+          if (client.jobCount < 2) continue;
+          if (upperText.includes(name)) {
+            // Exact substring mention — the strong signal. Prefer the
+            // longest matching name so a short client name that happens to
+            // be a substring of a longer one doesn't win over the real match.
+            if (!best || best.confidence !== 'name-substring' || name.length > best.clientName.length) {
+              best = { officeCode: office.officeCode, clientName: name, confidence: 'name-substring' };
+            }
+            continue;
+          }
+          if (best?.confidence === 'name-substring') continue; // already have a stronger match
+          // Typo-tolerant fallback: only against the client name's first
+          // word, and only for word pairs long enough that a short edit
+          // distance is actually meaningful (avoids "JWY" matching "ANY").
+          const firstWord = name.split(' ')[0];
+          if (firstWord.length < 5) continue;
+          for (const word of words) {
+            if (Math.abs(word.length - firstWord.length) > 2) continue;
+            const dist = levenshtein(word, firstWord);
+            const threshold = firstWord.length >= 7 ? 2 : 1;
+            if (dist > threshold) continue;
+            // Keep the closer of two typo matches rather than just the last
+            // one found, so an incidental word/name collision elsewhere in
+            // the directory can't bump a tighter earlier match.
+            if (!best || best.confidence !== 'name-typo' || dist < best.distance) {
+              best = { officeCode: office.officeCode, clientName: name, confidence: 'name-typo', distance: dist };
+            }
+          }
+        }
+      }
+    }
+  }
+  if (!best) return null;
+
+  const escaped = best.clientName.replace(/[\\%_]/g, '\\$&');
+  const { rows } = await pool.query(
+    `SELECT j.id, j.job_name, j.po_number, o.name AS office_name
+     FROM jobs j JOIN offices o ON o.id = j.office_id
+     WHERE o.code = $1 AND j.job_name ILIKE $2 ESCAPE '\\'
+     ORDER BY j.updated_at DESC LIMIT 1`,
+    [best.officeCode, `${escaped}%`]
+  );
+  return rows[0] ? { ...rows[0], matchConfidence: 'fuzzy' } : null;
 }
 
 export async function getJobHistory(user, jobId) {
