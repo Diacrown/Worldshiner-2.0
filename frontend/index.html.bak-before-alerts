@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="config.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#FDE8E6; --s1:oklch(0.99 0.006 20); --s2:oklch(0.95 0.015 20); --s3:oklch(0.85 0.02 20);
@@ -200,31 +199,6 @@
   .cli-client-row:hover{background:var(--s2)}
   .cli-client-row .name{font-weight:600;font-size:13px}
   .cli-client-row .meta{font-size:11px;color:var(--text2)}
-
-  /* â”€â”€ Alerts view (Diacrown/Diamore HQ only) â€” ported from india_factory_app.html's 7-category alert system, now living as a normal page in its original sidebar slot instead of a header dropdown â”€â”€ */
-  .hq-alert-scopenote{padding:6px 12px;font-size:10.5px;color:var(--text2);background:var(--s2);border:1px solid var(--border);border-radius:var(--rad) var(--rad) 0 0;border-bottom:none}
-  .hq-alert-empty{padding:16px 14px;font-size:12.5px;color:var(--text2);font-style:italic;border:1px solid var(--border);border-top:none}
-  #hqAlertList{border:1px solid var(--border);border-radius:0 0 var(--rad) var(--rad);overflow:hidden}
-  .hq-alert-cat{border-bottom:1px solid var(--border);background:var(--s1)}
-  .hq-alert-cat:last-child{border-bottom:none}
-  .hq-alert-cat-head{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;font-size:13px}
-  .hq-alert-cat-head:hover{background:var(--s2)}
-  .hq-alert-cat-arrow{font-size:9px;color:var(--text2);transition:transform .12s ease}
-  .hq-alert-cat-arrow.open{transform:rotate(90deg)}
-  .hq-alert-cat-name{flex:1;font-weight:600;color:var(--text)}
-  .hq-alert-cat-limit{font-weight:400;color:var(--text2);font-size:11px}
-  .hq-alert-cat-count{background:var(--s3);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;color:var(--text2)}
-  .hq-alert-cat-count.hot{background:var(--red);color:#fff}
-  .hq-alert-cat-xl{background:none;border:none;padding:2px 4px;font-size:13px;border-radius:4px}
-  .hq-alert-cat-xl:hover{background:var(--s3)}
-  .hq-alert-cat-body{background:var(--s2)}
-  .hq-alert-item{padding:9px 14px;border-top:1px solid var(--border);cursor:pointer}
-  .hq-alert-item:hover{background:var(--s3)}
-  .hq-alert-item-top{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:600;color:var(--text)}
-  .hq-alert-pill{font-size:9.5px;font-weight:700;border-radius:8px;padding:1px 7px;white-space:nowrap}
-  .hq-alert-item.mid .hq-alert-pill{background:var(--gold-bg);color:var(--gold-dark)}
-  .hq-alert-item.hi .hq-alert-pill{background:var(--burgundy-bg);color:var(--red)}
-
 </style>
 </head>
 <body>
@@ -299,10 +273,34 @@
           <div class="empty" id="emptyState" style="display:none">No jobs yet — create the first one.</div>
         </div>
 
-                <div id="slaView" style="display:none">
-          <div class="section-head"><div><h2>Alerts</h2><p>The old Diacrown/Diamore India tracker's 7 status-driven categories, worked out fresh every time you open this.</p></div></div>
-          <div class="hq-alert-scopenote" id="hqAlertScopeNote"></div>
-          <div id="hqAlertList"></div>
+        <div id="slaView" style="display:none">
+          <div class="section-head"><div><h2>Alerts</h2><p>Jobs that need attention, surfaced automatically</p></div></div>
+          <div class="subtabs">
+            <button class="subtab-btn active" data-subtab="slaBreaches">SLA Breaches</button>
+            <button class="subtab-btn" data-subtab="needsAttention">Needs Attention</button>
+          </div>
+
+          <div class="subtabpane active" id="subtab-slaBreaches">
+            <table>
+              <thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Status</th><th>SLA Rule</th><th>Time in status</th><th>Threshold</th><th>Overage</th></tr></thead>
+              <tbody id="slaBody"></tbody>
+            </table>
+            <div class="empty" id="slaEmptyState" style="display:none">No SLA breaches right now.</div>
+          </div>
+
+          <div class="subtabpane" id="subtab-needsAttention">
+            <h2 style="font-size:14px;margin:14px 0 8px">📅 Due within 3 days</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Delivery Date</th><th></th></tr></thead><tbody id="alertsDueSoonBody"></tbody></table>
+            <div class="empty" id="alertsDueSoonEmpty" style="display:none">Nothing due in the next 3 days.</div>
+
+            <h2 style="font-size:14px;margin:20px 0 8px">🌏 Awaiting overseas update</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Last HQ update</th><th></th></tr></thead><tbody id="alertsOverseasBody"></tbody></table>
+            <div class="empty" id="alertsOverseasEmpty" style="display:none">Nothing waiting on India right now.</div>
+
+            <h2 style="font-size:14px;margin:20px 0 8px">📞 Client chase-up due</h2>
+            <table><thead><tr><th>Job</th><th>Office</th><th>Priority</th><th>Follow-up date</th><th></th></tr></thead><tbody id="alertsChaseBody"></tbody></table>
+            <div class="empty" id="alertsChaseEmpty" style="display:none">No client follow-ups due.</div>
+          </div>
         </div>
         <div id="reportsView" style="display:none">
           <div class="section-head"><div><h2>Reports</h2><p>Ready-made summaries and exports</p></div></div>
@@ -1058,7 +1056,7 @@ async function showApp() {
   // office master at a branch can connect and review their own office's
   // inbox; HQ/org/global admin additionally sees every office's inbox.
   document.querySelector('[data-view="mail"]').style.display = canManageOwnMail ? 'flex' : 'none';
-  document.querySelector('[data-view="sla"]').style.display = USER.officeIsHq ? 'flex' : 'none';
+  document.querySelector('[data-view="sla"]').style.display = 'flex';
   document.querySelector('[data-view="clients"]').style.display = 'flex';
   $('cli_mergeToolBtn').style.display = isHqOrAdmin ? 'inline-block' : 'none';
   const hasAssay = !!USER.officeHasAssay;
@@ -1075,108 +1073,64 @@ async function showApp() {
 const VIEWS = {
   jobs: { onEnter: () => {} },
   clients: { onEnter: () => initClientsView() },
-  sla: { onEnter: () => { hqAlertItemsCache = {}; hqAlertOpenCat = null; refreshHqAlertBadge(); } },
+  sla: { onEnter: () => loadSlaAlerts() },
   reports: { onEnter: () => initReportsView() },
   staff: { onEnter: () => { loadStaff(); loadInvites(); } },
   import: { onEnter: () => initImportView() },
   mail: { onEnter: () => loadMailStatus() },
 };
-
-// ---- Alerts (Diacrown/Diamore HQ only) ----
-// The old India tracker's 7 status-driven categories, ported as-is into this
-// view â€” same place in the sidebar it always had, just with the old logic
-// instead of the generic SLA/Needs Attention feed this view used to show.
-// Nothing is cached beyond the current page visit; every open re-fetches
-// fresh counts, exactly like the old app recomputed everything live.
-let hqAlertCats = [];       // [{id,label,limitLabel}], filled in by /hq-alerts/counts
-let hqAlertCounts = {};     // { [catId]: n }
-let hqAlertOpenCat = null;  // which category is expanded, or null
-let hqAlertItemsCache = {}; // { [catId]: items[] } â€” cleared each time the view loads
-
-async function refreshHqAlertBadge() {
-  try {
-    const office = $('officeSwitcher').value;
-    const params = new URLSearchParams(); if (office) params.set('office', office);
-    const data = await api(`/hq-alerts/counts?${params.toString()}`);
-    hqAlertCats = data.cats; hqAlertCounts = data.counts;
-    renderHqAlertPanel();
-  } catch (e) { toast(e.message); }
-}
-function toggleHqAlertCat(catId) {
-  hqAlertOpenCat = hqAlertOpenCat === catId ? null : catId;
-  renderHqAlertPanel();
-  if (hqAlertOpenCat && !hqAlertItemsCache[hqAlertOpenCat]) loadHqAlertCatItems(hqAlertOpenCat);
-}
-async function loadHqAlertCatItems(catId) {
-  try {
-    const office = $('officeSwitcher').value;
-    const params = new URLSearchParams(); if (office) params.set('office', office);
-    const { items } = await api(`/hq-alerts/${catId}?${params.toString()}`);
-    hqAlertItemsCache[catId] = items;
-    if (hqAlertOpenCat === catId) renderHqAlertPanel();
-  } catch (e) { toast(e.message); }
-}
-function renderHqAlertPanel() {
+async function loadSlaAlerts() {
   const office = $('officeSwitcher').value;
-  const officeLabel = office ? (document.querySelector(`#officeSwitcher option[value="${office}"]`)?.textContent || office) : '';
-  $('hqAlertScopeNote').textContent = office
-    ? `Showing ${officeLabel} Â· counts include every office in your org`
-    : 'Showing every office in your org';
-  const total = Object.values(hqAlertCounts).reduce((a, b) => a + b, 0);
-  if (!hqAlertCats.length) { $('hqAlertList').innerHTML = `<div class="hq-alert-empty">Loadingâ€¦</div>`; return; }
-  if (!total) {
-    $('hqAlertList').innerHTML = `<div class="hq-alert-empty">âœ… Nothing overdue right now â€” all caught up.</div>`;
-    return;
-  }
-  $('hqAlertList').innerHTML = hqAlertCats.map(cat => {
-    const n = hqAlertCounts[cat.id] || 0;
-    const open = hqAlertOpenCat === cat.id;
-    let body = '';
-    if (open) {
-      const items = hqAlertItemsCache[cat.id];
-      if (!items) body = `<div class="hq-alert-empty">Loadingâ€¦</div>`;
-      else if (!items.length) body = `<div class="hq-alert-empty">No jobs here right now.</div>`;
-      else body = items.map(it => {
-        const hi = (it.overByH || 0) >= 24 || it.overdue;
-        const pill = cat.id === 'duedate' ? (it.overdue ? 'OVERDUE' : 'DUE SOON') : 'OVER LIMIT';
-        return `<div class="hq-alert-item ${hi ? 'hi' : 'mid'}" onclick="openJobDetail('${it.jobId}')">
-          <div class="hq-alert-item-top"><span>${escapeHtml(it.jobName || '(untitled)')}</span><span class="hq-alert-pill">${pill}</span></div>
-          <div class="hq-alert-item-reason">${escapeHtml(it.officeName || '')} Â· ${escapeHtml(it.reason)}</div>
-        </div>`;
-      }).join('');
-    }
-    return `<div class="hq-alert-cat">
-      <div class="hq-alert-cat-head" onclick="toggleHqAlertCat('${cat.id}')">
-        <span class="hq-alert-cat-arrow${open ? ' open' : ''}">â–¶</span>
-        <span class="hq-alert-cat-name">${escapeHtml(cat.label)} <span class="hq-alert-cat-limit">(${escapeHtml(cat.limitLabel)})</span></span>
-        <span class="hq-alert-cat-count${n ? ' hot' : ''}">${n}</span>
-        <button class="hq-alert-cat-xl" title="Download this list as Excel" onclick="event.stopPropagation();downloadHqAlertExcel('${cat.id}')">â¬‡ï¸</button>
-      </div>
-      ${open ? `<div class="hq-alert-cat-body">${body}</div>` : ''}
-    </div>`;
-  }).join('');
+  const params = new URLSearchParams();
+  if (office) params.set('office', office);
+  const { breaches } = await api(`/sla/breaches?${params.toString()}`);
+  $('slaEmptyState').style.display = breaches.length ? 'none' : 'block';
+  $('slaBody').innerHTML = breaches.map(b => `
+    <tr>
+      <td>${escapeHtml(b.jobName)}</td>
+      <td>${escapeHtml(b.officeName)}</td>
+      <td><span class="badge ${b.priority}">${b.priority}</span></td>
+      <td>${escapeHtml(b.statusCode)}</td>
+      <td>${escapeHtml(b.slaLabel)}</td>
+      <td>${b.hoursInStatus}h</td>
+      <td>${b.thresholdHours}h</td>
+      <td><span class="badge ${b.overageHours > b.thresholdHours ? 'sla-severe' : 'sla-mild'}">+${b.overageHours}h</span></td>
+    </tr>`).join('');
+  staggerIn($('slaBody'), 'tr');
 }
-async function downloadHqAlertExcel(catId) {
-  const cat = hqAlertCats.find(c => c.id === catId); if (!cat) return;
-  let items = hqAlertItemsCache[catId];
-  if (!items) { await loadHqAlertCatItems(catId); items = hqAlertItemsCache[catId]; }
-  if (!items || !items.length) { toast(`No jobs currently in "${cat.label}" to export.`); return; }
-  const header = ['Office', 'Status', 'PO Number', 'Design No.', 'Reason'];
-  const extraCols = { cadIssuedTo: 'Cad Partner', vendor: 'Vendor' };
-  const xlCols = { cadpending: ['cadIssuedTo'], readytoship: ['vendor'], duedate: ['vendor'] }[catId] || [];
-  header.push(...xlCols.map(k => extraCols[k]));
-  const rows = [header, ...items.map(it => [
-    it.officeName || '', it.hqStatusCode || '', it.poNumber || '', it.designNo || '', it.reason || '',
-    ...xlCols.map(k => it[k] || ''),
-  ])];
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  const sheetName = cat.label.replace(/[:\\/?*\[\]]/g, '-').slice(0, 31);
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  const today = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `${cat.label.replace(/[\\/:*?"<>|]/g, '-')}_${today}.xlsx`);
-}
+async function loadAlerts() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams();
+  if (office) params.set('office', office);
+  const { dueSoon, awaitingOverseas, chaseUp } = await api(`/alerts?${params.toString()}`);
+  const snoozeBtn = (id) => `<button class="btn-ghost btn-sm" data-snooze="${id}">💤 Snooze 10d</button>`;
 
+  $('alertsDueSoonEmpty').style.display = dueSoon.length ? 'none' : 'block';
+  $('alertsDueSoonBody').innerHTML = dueSoon.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.client_delivery_date ? new Date(j.client_delivery_date).toLocaleDateString() : '—'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  $('alertsOverseasEmpty').style.display = awaitingOverseas.length ? 'none' : 'block';
+  $('alertsOverseasBody').innerHTML = awaitingOverseas.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.last_hq_update ? new Date(j.last_hq_update).toLocaleDateString() : 'never'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  $('alertsChaseEmpty').style.display = chaseUp.length ? 'none' : 'block';
+  $('alertsChaseBody').innerHTML = chaseUp.map(j => `
+    <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
+    <td>${j.follow_up_date ? new Date(j.follow_up_date).toLocaleDateString() : '—'}</td><td>${snoozeBtn(j.id)}</td></tr>`).join('');
+
+  staggerIn($('alertsDueSoonBody'), 'tr');
+  staggerIn($('alertsOverseasBody'), 'tr');
+  staggerIn($('alertsChaseBody'), 'tr');
+
+  document.querySelectorAll('#subtab-needsAttention button[data-snooze]').forEach(b => {
+    b.onclick = async () => {
+      try { await api(`/alerts/jobs/${b.dataset.snooze}/snooze`, { method: 'POST', body: JSON.stringify({ days: 10 }) }); toast('Snoozed for 10 days.'); await loadAlerts(); }
+      catch (e) { toast(e.message); }
+    };
+  });
+}
 // ---- Executive Dashboard ----
 $('dash_refreshBtn').onclick = () => loadExecutiveDashboard();
 $('dash_months').onchange = () => loadExecutiveDashboard();
@@ -1528,6 +1482,7 @@ document.querySelectorAll('.navlist [data-view]').forEach(btn => btn.onclick = (
 // Generic sub-tab handling for Alerts (SLA Breaches / Needs Attention) and
 // Reports (Monthly / Setter-Polisher / Overdue / Client Items / Export).
 const SUBTAB_ENTER = {
+  needsAttention: () => loadAlerts(),
   repDashboard: () => loadExecutiveDashboard(),
   repSetterPolisher: () => loadSetterPolisherReport(),
   repOverdue: () => loadOverdueReport(),
