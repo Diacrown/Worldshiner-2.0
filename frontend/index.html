@@ -1118,7 +1118,11 @@ async function loadSlaAlerts() {
   const office = $('officeSwitcher').value;
   const params = new URLSearchParams();
   if (office) params.set('office', office);
-  const { breaches } = await api(`/sla/breaches?${params.toString()}`);
+  $('slaEmptyState').style.display = 'none';
+  $('slaBody').innerHTML = '<tr class="loading-row"><td colspan="8">Loading…</td></tr>';
+  let breaches;
+  try { ({ breaches } = await api(`/sla/breaches?${params.toString()}`)); }
+  catch (e) { $('slaBody').innerHTML = `<tr class="loading-row"><td colspan="8">${escapeHtml(e.message)}</td></tr>`; return; }
   $('slaEmptyState').style.display = breaches.length ? 'none' : 'block';
   $('slaBody').innerHTML = breaches.map(b => `
     <tr>
@@ -1137,7 +1141,17 @@ async function loadAlerts() {
   const office = $('officeSwitcher').value;
   const params = new URLSearchParams();
   if (office) params.set('office', office);
-  const { dueSoon, awaitingOverseas, chaseUp } = await api(`/alerts?${params.toString()}`);
+  ['alertsDueSoonEmpty', 'alertsOverseasEmpty', 'alertsChaseEmpty'].forEach((id) => { $(id).style.display = 'none'; });
+  $('alertsDueSoonBody').innerHTML = '<tr class="loading-row"><td colspan="5">Loading…</td></tr>';
+  $('alertsOverseasBody').innerHTML = '<tr class="loading-row"><td colspan="5">Loading…</td></tr>';
+  $('alertsChaseBody').innerHTML = '<tr class="loading-row"><td colspan="5">Loading…</td></tr>';
+  let dueSoon, awaitingOverseas, chaseUp;
+  try { ({ dueSoon, awaitingOverseas, chaseUp } = await api(`/alerts?${params.toString()}`)); }
+  catch (e) {
+    const errRow = `<tr class="loading-row"><td colspan="5">${escapeHtml(e.message)}</td></tr>`;
+    $('alertsDueSoonBody').innerHTML = errRow; $('alertsOverseasBody').innerHTML = errRow; $('alertsChaseBody').innerHTML = errRow;
+    return;
+  }
   const snoozeBtn = (id) => `<button class="btn-ghost btn-sm" data-snooze="${id}">💤 Snooze 10d</button>`;
 
   $('alertsDueSoonEmpty').style.display = dueSoon.length ? 'none' : 'block';
@@ -1171,6 +1185,16 @@ $('dash_refreshBtn').onclick = () => loadExecutiveDashboard();
 $('dash_months').onchange = () => loadExecutiveDashboard();
 async function loadExecutiveDashboard() {
   const months = $('dash_months').value;
+  // This is the slowest page in the app (~1.8s even warm — it runs 3
+  // queries, see reports.service.js), and previously just left the stat
+  // tiles and tables showing whatever they'd last rendered (or nothing, on
+  // first load) for that whole wait with no indication anything was
+  // happening.
+  $('dash_totalJobs').textContent = '…';
+  $('dash_totalRevenue').textContent = '…';
+  $('dash_openAgeBody').innerHTML = '<tr class="loading-row"><td colspan="3">Loading…</td></tr>';
+  $('dash_topClientsBody').innerHTML = '<tr class="loading-row"><td colspan="4">Loading…</td></tr>';
+  $('dash_trendChart').innerHTML = '<text x="320" y="110" text-anchor="middle" fill="var(--text2)" font-size="13">Loading…</text>';
   try {
     const data = await api(`/reports/executive-dashboard?months=${months}`);
     $('dash_totalJobs').textContent = data.trend.reduce((s, m) => s + m.jobCount, 0);
@@ -1195,7 +1219,14 @@ async function loadExecutiveDashboard() {
         openClientJobs(row.dataset.office, row.dataset.client);
       };
     });
-  } catch (e) { toast(e.message); }
+  } catch (e) {
+    toast(e.message);
+    $('dash_totalJobs').textContent = '—'; $('dash_totalRevenue').textContent = '—';
+    const errRow = (cols) => `<tr><td colspan="${cols}" class="meta">${escapeHtml(e.message)}</td></tr>`;
+    $('dash_openAgeBody').innerHTML = errRow(3);
+    $('dash_topClientsBody').innerHTML = errRow(4);
+    $('dash_trendChart').innerHTML = `<text x="320" y="110" text-anchor="middle" fill="var(--text2)" font-size="13">${escapeHtml(e.message)}</text>`;
+  }
 }
 function fmtMoney(n) {
   return '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -1260,6 +1291,7 @@ async function generateReport() {
   if (!year || !month) return;
   const params = new URLSearchParams({ year, month });
   if ($('rep_office').value) params.set('office', $('rep_office').value);
+  $('reportCards').innerHTML = '<p class="meta">Loading…</p>';
   try {
     const { offices } = await api(`/reports/monthly-summary?${params.toString()}`);
     $('reportCards').innerHTML = offices.map(o => `
@@ -1268,12 +1300,14 @@ async function generateReport() {
         <div>Created: <b>${o.createdCount}</b> &nbsp; Completed: <b>${o.completedCount}</b> &nbsp; Not proceeding: <b>${o.notProceedingCount}</b></div>
         ${o.statusBreakdown.length ? `<div class="meta" style="margin-top:8px">${o.statusBreakdown.map(s => `${escapeHtml(s.label)}: ${s.count}`).join(' · ')}</div>` : ''}
       </div>`).join('') || '<p class="meta">No activity for this period.</p>';
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); $('reportCards').innerHTML = `<p class="meta">${escapeHtml(e.message)}</p>`; }
 }
 $('rep_generateBtn').onclick = generateReport;
 async function loadSetterPolisherReport() {
   const office = $('officeSwitcher').value;
   const params = new URLSearchParams(); if (office) params.set('office', office);
+  $('repSetterPolisherEmpty').style.display = 'none';
+  $('repSetterPolisherBody').innerHTML = '<tr class="loading-row"><td colspan="7">Loading…</td></tr>';
   try {
     const { entries } = await api(`/reports/setter-polisher-summary?${params.toString()}`);
     $('repSetterPolisherEmpty').style.display = entries.length ? 'none' : 'block';
@@ -1281,28 +1315,32 @@ async function loadSetterPolisherReport() {
       <tr><td>${escapeHtml(e.job_name)}</td><td>${escapeHtml(e.office_name)}</td><td style="text-transform:capitalize">${e.role_type}</td>
       <td>${escapeHtml(e.person_name || '—')}</td><td>${e.date_sent ? new Date(e.date_sent).toLocaleDateString() : '—'}</td>
       <td>${e.due_date ? new Date(e.due_date).toLocaleDateString() : '—'}</td><td>${e.fee || '—'}</td></tr>`).join('');
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); $('repSetterPolisherBody').innerHTML = `<tr class="loading-row"><td colspan="7">${escapeHtml(e.message)}</td></tr>`; }
 }
 async function loadOverdueReport() {
   const office = $('officeSwitcher').value;
   const params = new URLSearchParams(); if (office) params.set('office', office);
+  $('repOverdueEmpty').style.display = 'none';
+  $('repOverdueBody').innerHTML = '<tr class="loading-row"><td colspan="5">Loading…</td></tr>';
   try {
     const { jobs } = await api(`/reports/overdue?${params.toString()}`);
     $('repOverdueEmpty').style.display = jobs.length ? 'none' : 'block';
     $('repOverdueBody').innerHTML = jobs.map(j => `
       <tr><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.office_name)}</td><td><span class="badge ${j.priority}">${j.priority}</span></td>
       <td>${escapeHtml(j.status_code)}</td><td>${j.daysInStatus}d</td></tr>`).join('');
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); $('repOverdueBody').innerHTML = `<tr class="loading-row"><td colspan="5">${escapeHtml(e.message)}</td></tr>`; }
 }
 async function loadClientItemsReport() {
   const office = $('officeSwitcher').value;
   const params = new URLSearchParams(); if (office) params.set('office', office);
+  $('repClientItemsEmpty').style.display = 'none';
+  $('repClientItemsBody').innerHTML = '<tr class="loading-row"><td colspan="3">Loading…</td></tr>';
   try {
     const { items } = await api(`/reports/client-items?${params.toString()}`);
     $('repClientItemsEmpty').style.display = items.length ? 'none' : 'block';
     $('repClientItemsBody').innerHTML = items.map(i => `
       <tr><td>${escapeHtml(i.job_name)}</td><td>${escapeHtml(i.office_name)}</td><td>${escapeHtml(i.description || '—')}</td></tr>`).join('');
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); $('repClientItemsBody').innerHTML = `<tr class="loading-row"><td colspan="3">${escapeHtml(e.message)}</td></tr>`; }
 }
 $('rep_csvBtn').onclick = async () => {
   try {
@@ -2471,7 +2509,10 @@ $('imgFileInput').onchange = async () => {
 
 // ---- Staff view ----
 async function loadStaff() {
-  const { users } = await api('/users');
+  $('staffBody').innerHTML = '<tr class="loading-row"><td colspan="6">Loading…</td></tr>';
+  let users;
+  try { ({ users } = await api('/users')); }
+  catch (e) { $('staffBody').innerHTML = `<tr class="loading-row"><td colspan="6">${escapeHtml(e.message)}</td></tr>`; return; }
   $('staffBody').innerHTML = users.map(u => {
     const roles = [u.is_global_admin && 'Global admin', u.is_org_admin && 'Org admin', u.is_office_master && 'Master', u.restrict_to_own_jobs && 'Own jobs only'].filter(Boolean).join(', ') || 'Staff';
     return `<tr><td>${escapeHtml(u.display_name)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.org_code || '—')}</td><td>${escapeHtml(u.office_name)}</td><td>${roles}</td>
@@ -2505,6 +2546,7 @@ $('saveStaff').onclick = async () => {
 
 // ---- Invite codes ----
 async function loadInvites() {
+  $('inviteBody').innerHTML = '<tr class="loading-row"><td colspan="6">Loading…</td></tr>';
   try {
     const { invites } = await api('/invite-codes');
     $('inviteBody').innerHTML = invites.map(i => {
