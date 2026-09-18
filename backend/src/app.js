@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import 'dotenv/config';
 
+import { pool } from './db/pool.js';
 import { authRouter } from './routes/auth.routes.js';
 import { jobsRouter } from './routes/jobs.routes.js';
 import { officesRouter } from './routes/offices.routes.js';
@@ -29,7 +30,26 @@ app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
 app.use(express.json({ limit: '8mb' })); // headroom for base64 image uploads (see uploads.routes.js)
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
+// Liveness only — deliberately doesn't touch the database, since this is
+// what Render's own health-check probe polls, and a DB-dependent check
+// failing here could make Render think the whole service is unhealthy and
+// restart it, which does nothing to fix a database-side outage.
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'worldshiner2-backend' }));
+
+// Deep check — actually queries the database, so it catches exactly the
+// failure mode that let a Supabase free-tier auto-pause go unnoticed until
+// someone tried to log in: /api/health said "ok" the whole time because it
+// never checked. Not wired into anything automatic yet — for now this is
+// the thing to hit manually (or from an uptime monitor) to know for sure.
+app.get('/api/health/deep', async (req, res) => {
+  const checkedAt = new Date().toISOString();
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, database: 'reachable', checkedAt });
+  } catch (err) {
+    res.status(503).json({ ok: false, database: 'unreachable', error: err.message, checkedAt });
+  }
+});
 
 app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
