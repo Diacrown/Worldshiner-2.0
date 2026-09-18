@@ -194,7 +194,7 @@ export async function getExecutiveDashboard(user, { months = 6 } = {}) {
     GROUP BY 1
     ORDER BY 1
   `;
-  const { rows: trendRows } = await pool.query(trendSql, [...params, since]);
+  const trendPromise = pool.query(trendSql, [...params, since]);
 
   // A true "time to complete" turnaround turned out not to be reliably
   // computable: 448 jobs currently sit at job_completed, and essentially
@@ -230,13 +230,20 @@ export async function getExecutiveDashboard(user, { months = 6 } = {}) {
     GROUP BY o.code, o.name
     ORDER BY avg_open_days DESC
   `;
-  const { rows: turnaroundRows } = await pool.query(turnaroundSql, params);
+  const turnaroundPromise = pool.query(turnaroundSql, params);
 
   // Reuses the Clients page's own directory computation rather than a
   // separate query — "top clients" is just that same data flattened and
   // sorted, so it can never drift out of sync with what the Clients page
   // itself shows.
-  const directory = await getClientDirectory(user);
+  const directoryPromise = getClientDirectory(user);
+
+  // These three are independent of each other — running them concurrently
+  // instead of one after another cuts the total wait to roughly the slowest
+  // of the three instead of the sum of all three.
+  const [{ rows: trendRows }, { rows: turnaroundRows }, directory] = await Promise.all([
+    trendPromise, turnaroundPromise, directoryPromise,
+  ]);
   const topClients = [];
   for (const region of directory) {
     for (const country of region.countries) {
