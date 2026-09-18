@@ -1,0 +1,29 @@
+name: Keep backend and database warm
+
+# Prevents two real things that have already bitten this project:
+# - Render's free tier spins the backend down after ~15 min with no traffic.
+# - Supabase's free tier pauses the database after ~7 days with no activity
+#   (this is exactly what caused the outage on 2026-09-18 — /api/health said
+#   "ok" the whole time since it never actually touched the database).
+#
+# Hits /api/health/deep specifically, not /api/health, since only the deep
+# check actually queries the database and would catch this again early.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping deep health check
+        run: |
+          response=$(curl -s -w "\n%{http_code}" https://worldshiner2-api.onrender.com/api/health/deep)
+          status="${response##*$'\n'}"
+          body="${response%$'\n'*}"
+          echo "HTTP $status: $body"
+          if [ "$status" != "200" ]; then
+            echo "::error::Deep health check failed — database or backend unreachable"
+            exit 1
+          fi
