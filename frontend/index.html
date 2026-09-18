@@ -70,13 +70,6 @@
   .toolbar select{width:auto}
   .toolbar .spacer{flex:1}
   .mobile-nav-toggle{display:none;background:none;color:var(--text);padding:6px}
-  @media (max-width:900px){
-    .sidebar{position:fixed;z-index:40;height:100vh;transform:translateX(-100%)}
-    .sidebar.mobile-open{transform:translateX(0)}
-    .mobile-nav-toggle{display:inline-block}
-    .grid2{grid-template-columns:1fr}
-    table{display:block;overflow-x:auto;white-space:nowrap}
-  }
 
   table{width:100%;border-collapse:collapse;background:var(--s1);border-radius:var(--rad);overflow:hidden;box-shadow:0 6px 20px rgba(40,20,10,.08)}
   th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--border)}
@@ -199,6 +192,36 @@
   .cli-client-row:hover{background:var(--s2)}
   .cli-client-row .name{font-weight:600;font-size:13px}
   .cli-client-row .meta{font-size:11px;color:var(--text2)}
+
+  /* Kept last on purpose: media queries need to come after the base rules
+     they override, or an equal-specificity base rule later in the file
+     (e.g. table{overflow:hidden}, added for desktop's rounded corners) wins
+     the cascade on source order alone and silently cancels the override —
+     exactly what happened here (mobile's table{overflow-x:auto} was
+     defined near the top, before that base rule, so it never applied and
+     the table's Contact/Priority/Status/PO#/Delivery columns were simply
+     unreachable on a phone, not just scrolled offscreen). */
+  @media (max-width:900px){
+    .sidebar{position:fixed;z-index:40;height:100vh;transform:translateX(-100%)}
+    .sidebar.mobile-open{transform:translateX(0)}
+    .mobile-nav-toggle{display:inline-block}
+    .grid2{grid-template-columns:1fr}
+    table{display:block;overflow-x:auto;white-space:nowrap}
+
+    /* The who-am-I text (name + office + org chain) wrapped into a tall
+       multi-line block that pushed Change Password / Sign out past the
+       right edge with no way to reach them. Now wraps to its own full-width
+       line below a compact controls row instead. */
+    .topbar{flex-wrap:wrap;padding:10px 14px;gap:8px 10px}
+    .topbar .who{order:99;flex:1 1 100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:0}
+    .topbar select{max-width:130px}
+    .topbar button{padding:7px 11px;font-size:13px}
+
+    /* The office chat bubble was overlapping page content in the corner
+       with little room to spare at phone width. */
+    .chat-fab{width:46px;height:46px;font-size:19px;bottom:16px;right:16px}
+    .chat-panel{right:10px;bottom:70px;width:calc(100vw - 20px)}
+  }
 </style>
 </head>
 <body>
