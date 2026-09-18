@@ -882,7 +882,19 @@ async function api(path, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}), ...(options.headers || {}) },
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) { const err = new Error(body.error || `Request failed (${res.status})`); err.status = res.status; throw err; }
+    if (!res.ok) {
+      // A 5xx with no JSON body (a bare "Request failed (502)") is what a
+      // real user saw during today's database outage — technically
+      // accurate, not reassuring. Our own routes always send a proper
+      // { error } message, so a missing one at 5xx means something failed
+      // before it ever reached application code (the database, the host).
+      const message = body.error || (res.status >= 500
+        ? 'The server is temporarily unavailable. Please try again in a moment.'
+        : `Request failed (${res.status})`);
+      const err = new Error(message);
+      err.status = res.status;
+      throw err;
+    }
     return body;
   } finally {
     clearTimeout(wakingHint);
