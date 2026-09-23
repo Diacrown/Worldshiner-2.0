@@ -19,6 +19,7 @@ import { importRouter } from './routes/import.routes.js';
 import { gmailRouter } from './routes/gmail.routes.js';
 import { officeChatRouter } from './routes/officeChat.routes.js';
 import { alertsRouter } from './routes/alerts.routes.js';
+import { hqAlertsRouter } from './routes/hqAlerts.routes.js';
 import { clientsRouter } from './routes/clients.routes.js';
 import { trackRouter } from './routes/track.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -77,6 +78,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/import', importRouter);
 app.use('/api/office-chat', officeChatRouter);
 app.use('/api/alerts', alertsRouter);
+app.use('/api/hq-alerts', hqAlertsRouter);
 app.use('/api/clients', clientsRouter);
 
 app.use(notFoundHandler);
