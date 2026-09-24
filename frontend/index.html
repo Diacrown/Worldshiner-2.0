@@ -70,6 +70,42 @@
   .toolbar input[type=text]{max-width:260px}
   .toolbar select{width:auto}
   .toolbar .spacer{flex:1}
+  .job-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .job-tab-btn{background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:6px 13px;font-size:12.5px;font-weight:600;color:var(--text2);cursor:pointer}
+  .job-tab-btn:hover{background:var(--s3)}
+  .job-tab-btn.active{background:var(--accent, var(--gold));color:#fff;border-color:transparent}
+  .job-tab-count{display:inline-block;margin-left:6px;background:rgba(0,0,0,.15);border-radius:9px;padding:0 7px;font-size:11px}
+  .job-tab-btn.active .job-tab-count{background:rgba(255,255,255,.25)}
+  .office-bar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);align-self:center;margin-right:4px}
+  .office-bar-btn{background:var(--s2);border:1px solid var(--border);border-radius:16px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer}
+  .office-bar-btn:hover{background:var(--s3)}
+  .office-bar-btn.active{background:var(--accent2, var(--accent));color:#fff;border-color:transparent}
+  .office-bar-btn .job-tab-count{display:inline-block;margin-left:5px;background:rgba(0,0,0,.15);border-radius:9px;padding:0 6px;font-size:10.5px}
+  .office-bar-btn.active .job-tab-count{background:rgba(255,255,255,.25)}
+  .summary-stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;font-size:12.5px;color:var(--text2)}
+  .summary-stats b{color:var(--text);font-weight:700}
+
+  .issues-bar{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+  .issue-toggle{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px}
+  .issue-toggle input{width:auto}
+  .issue-empty{padding:40px;text-align:center;color:var(--text2);background:var(--s1);border-radius:var(--rad)}
+  .issue-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin:14px 0 8px}
+  .issue-card{display:flex;justify-content:space-between;gap:14px;background:var(--s1);border-left:3px solid var(--red);border-radius:var(--rad);padding:14px 16px;margin-bottom:10px;box-shadow:0 4px 14px rgba(40,20,10,.06)}
+  .issue-card.resolved{border-left-color:var(--green);opacity:.75}
+  .issue-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  .issue-jobname{background:none;padding:0;font-size:14px;font-weight:700;color:var(--text)}
+  .issue-jobname:hover{text-decoration:underline}
+  .issue-meta{font-size:12px;color:var(--text2);margin-bottom:4px}
+  .issue-reason{font-size:13px;color:var(--text)}
+  .issue-card-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+  .issue-type-badge{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal-box{background:var(--s1);border-radius:12px;padding:22px;width:100%;max-width:440px;max-height:85vh;overflow-y:auto}
+  .issue-pick-row{display:block;width:100%;text-align:left;background:var(--s2);border:1px solid var(--border);border-radius:var(--rad);padding:8px 10px;margin-bottom:6px;font-size:13px}
+  .issue-pick-row:hover{background:var(--s3)}
+  .issue-pick-row.sel{border-color:var(--accent, var(--gold));background:var(--gold-bg)}
   .mobile-nav-toggle{display:none;background:none;color:var(--text);padding:6px}
 
   table{width:100%;border-collapse:collapse;background:var(--s1);border-radius:var(--rad);overflow:hidden;box-shadow:0 6px 20px rgba(40,20,10,.08)}
@@ -313,7 +349,10 @@
       <main>
 
         <div id="jobsView">
-          <div class="toolbar">
+          <div class="job-tabs" id="jobTabsBar"></div>
+          <div class="job-tabs" id="officeBar" style="display:none"></div>
+          <div class="summary-stats" id="summaryStats"></div>
+          <div class="toolbar" id="jobsToolbar">
             <input type="text" id="searchInput" placeholder="Search job name, contact, PO…">
             <select id="statusFilter"><option value="">All statuses</option></select>
             <span class="spacer"></span>
@@ -325,6 +364,40 @@
             <tbody id="jobsBody"></tbody>
           </table>
           <div class="empty" id="emptyState" style="display:none">No jobs yet — create the first one.</div>
+
+          <div id="issuesPanel" style="display:none">
+            <div class="issues-bar">
+              <button class="btn-primary" id="issueLogAddBtn">＋ Add issue</button>
+              <label class="issue-toggle"><input type="checkbox" id="issueShowResolvedChk"> Show resolved</label>
+            </div>
+            <div id="issueLogList"></div>
+          </div>
+        </div>
+
+        <div class="modal-overlay" id="issuePickerOverlay">
+          <div class="modal-box">
+            <h2 id="issuePickTitle" style="margin-bottom:14px">⚠️ Flag a job with an issue</h2>
+            <div id="issuePickSearchWrap">
+              <input type="text" id="issuePickSearch" placeholder="Search job name, contact, PO…" oninput="issuePickFilter(this.value)" style="margin-bottom:10px">
+              <div id="issuePickResults" style="max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
+            </div>
+            <div id="issueFormWrap" style="display:none">
+              <div id="issueFormJob" style="font-weight:700;margin-bottom:10px"></div>
+              <label>Issue type</label>
+              <select id="issueType" style="margin-bottom:10px">
+                <option>Repair</option><option>Replace</option><option>Other</option>
+              </select>
+              <label>Description</label>
+              <textarea id="issueDescription" rows="3" style="margin-bottom:14px"></textarea>
+              <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="btn-ghost" onclick="closeIssuePicker()">Cancel</button>
+                <button class="btn-primary" onclick="saveIssue()">Save issue</button>
+              </div>
+            </div>
+            <div id="issuePickCloseRow" style="text-align:right;margin-top:6px">
+              <button class="btn-ghost" onclick="closeIssuePicker()">Close</button>
+            </div>
+          </div>
         </div>
 
         <div id="slaView" style="display:none">
@@ -1116,7 +1189,13 @@ async function showApp() {
   $('loginScreen').style.display = 'none'; $('app').style.display = 'block';
   startIdleTimer();
   $('whoAmI').textContent = `${USER.displayName} · ${USER.officeName}${USER.orgName ? ' · ' + USER.orgName : ''}`;
-  const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq;
+  // Office switcher is an ADMIN-ONLY drill-down tool, not a general
+  // HQ-staff perk: an ordinary HQ/India staff member (officeIsHq but not an
+  // admin) already sees their whole org's jobs combined by default and has
+  // no legitimate reason to narrow it to one specific branch — only Org
+  // Admins and the Global Admin get that tool. Plain HQ staff still see
+  // everything else HQ-related (tabs, summary stats, HQ Alerts, Reports).
+  const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin;
   const isAdmin = USER.isGlobalAdmin || USER.isOrgAdmin;
   const isHqOrAdmin = isAdmin || USER.officeIsHq;
   const canManageOwnMail = isHqOrAdmin || USER.isOfficeMaster;
@@ -2169,8 +2248,17 @@ async function loadOffices() {
   const { offices } = await api('/offices');
   OFFICES = offices;
   const sel = $('officeSwitcher');
-  sel.innerHTML = `<option value="">All offices</option>` + offices.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' — ' + o.org_code : ''}</option>`).join('');
-  sel.onchange = loadJobs;
+  // No separate "All offices" entry — selecting an org's own HQ row (e.g.
+  // "Head Office / India (Diacrown)") now IS that org's all-offices view,
+  // via buildScope's HQ-code expansion (see scope.js). The list already
+  // sorts HQ rows first within their org, so the browser's natural
+  // first-option default lands on exactly the right "home" view.
+  sel.innerHTML = offices.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' — ' + o.org_code : ''}</option>`).join('');
+  // Switching office can change which tab WORLD applies (HQ 10-tab vs a
+  // branch's own 6-tab set) — a tab id valid in one doesn't exist in the
+  // other, so always drop back to "All Jobs" rather than risk silently
+  // matching nothing (or the wrong thing) under a stale tab id.
+  sel.onchange = () => { jobActiveTab = ''; showJobsTable(); loadJobs(); loadJobTabCounts(); };
 }
 async function loadStatuses() {
   const { statuses } = await api('/offices/statuses');
@@ -2184,11 +2272,108 @@ function statusOptionsHtml(currentCode) {
 }
 
 // ---- Jobs list ----
+// Dashboard tab bar (fast triage) — separate from the fine-grained status
+// dropdown filter; picking one clears the other so a viewer never wonders
+// why a combination silently returned nothing (the backend applies whichever
+// one is set, tab taking priority — see jobs.service.js). Tab set (HQ's 10
+// vs a branch's 6) is decided server-side per viewer; the frontend just
+// renders whatever /jobs/tab-counts returns. The branch's "Issues on Hand"
+// entry is NOT a status filter — data.hasIssueLog flags that clicking it
+// should open the separate issues panel instead of filtering the table
+// (see jobTabs.js's header comment for why these are independent things).
+let jobActiveTab = '';
+let jobsHasIssueLog = false;
+async function loadJobTabCounts() {
+  const office = $('officeSwitcher').value;
+  const params = new URLSearchParams(); if (office) params.set('office', office);
+  try {
+    const data = await api(`/jobs/tab-counts?${params.toString()}`);
+    jobsHasIssueLog = !!data.hasIssueLog;
+    renderJobTabs(data);
+  } catch (e) { /* silent — tab bar just won't show this cycle */ }
+  loadOfficeBar();
+  loadPhaseCounts();
+}
+// Office/branch breakdown bar — ADMIN-ONLY, same reasoning as the office
+// switcher just above (it's the same drill-down tool, shown a second way).
+// Plain HQ staff never see this either, only Org Admins and Global Admin.
+async function loadOfficeBar() {
+  const bar = $('officeBar');
+  if (!(USER.isGlobalAdmin || USER.isOrgAdmin)) { bar.style.display = 'none'; return; }
+  // "All" means "my own org's HQ view" now that the office switcher has no
+  // separate all-offices sentinel — USER.officeCode IS that org's HQ code
+  // for any real HQ staff member (see scope.js's HQ-code expansion).
+  const homeCode = USER.officeCode;
+  try {
+    const { offices } = await api('/jobs/office-counts');
+    if (!offices.length) { bar.style.display = 'none'; return; }
+    const current = $('officeSwitcher').value;
+    bar.innerHTML = `<span class="office-bar-label">Office</span>` +
+      `<button class="office-bar-btn${current === homeCode ? ' active' : ''}" data-office="${homeCode}">All<span class="job-tab-count">${offices.reduce((a,o)=>a+o.count,0)}</span></button>` +
+      offices.map(o => `<button class="office-bar-btn${current === o.code ? ' active' : ''}" data-office="${o.code}">${escapeHtml(o.name)}<span class="job-tab-count">${o.count}</span></button>`).join('');
+    bar.style.display = 'flex';
+    bar.querySelectorAll('button[data-office]').forEach(b => {
+      b.onclick = () => { $('officeSwitcher').value = b.dataset.office; $('officeSwitcher').onchange(); };
+    });
+  } catch (e) { bar.style.display = 'none'; }
+}
+// Summary stat line — "Jobs shown" always reflects whatever's currently
+// filtered/visible (computed from the already-loaded JOBS array, no extra
+// call). HQ's "In production / CAD stage / QC" are deliberately org-wide
+// and ignore the current filter entirely (see jobTabs.js's HQ_PHASES
+// comment) — fetched separately and cached until the next refresh. Branch's
+// "Invoice total" sums invoice_amount across whatever's currently shown,
+// same scope as "Jobs shown".
+let PHASE_COUNTS = null;
+async function loadPhaseCounts() {
+  if (!(USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq)) { PHASE_COUNTS = null; renderSummaryStats(); return; }
+  try { PHASE_COUNTS = await api('/jobs/phase-counts'); } catch (e) { PHASE_COUNTS = null; }
+  renderSummaryStats();
+}
+function renderSummaryStats() {
+  const el = $('summaryStats');
+  const shown = JOBS.length;
+  if (USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq) {
+    if (!PHASE_COUNTS) { el.innerHTML = `Jobs shown: <b>${shown}</b>`; return; }
+    el.innerHTML = `Jobs shown: <b>${shown}</b> &nbsp;·&nbsp; In production: <b>${PHASE_COUNTS.prod}</b> &nbsp;·&nbsp; CAD stage: <b>${PHASE_COUNTS.cad}</b> &nbsp;·&nbsp; QC: <b>${PHASE_COUNTS.qc}</b>`;
+  } else {
+    const total = JOBS.reduce((a, j) => a + (Number(j.invoice_amount) || 0), 0);
+    el.innerHTML = `Jobs shown: <b>${shown}</b> &nbsp;·&nbsp; Invoice total: <b>${total ? '$' + total.toLocaleString() : '—'}</b>`;
+  }
+}
+function renderJobTabs(data) {
+  const allBtn = `<button class="job-tab-btn${jobActiveTab === '' ? ' active' : ''}" data-tab="">All Jobs<span class="job-tab-count">${data.total}</span></button>`;
+  const rest = data.tabs.map(t => `<button class="job-tab-btn${jobActiveTab === t.id ? ' active' : ''}" data-tab="${t.id}">${escapeHtml(t.label)}<span class="job-tab-count">${t.count}</span></button>`).join('');
+  $('jobTabsBar').innerHTML = allBtn + rest;
+  $('jobTabsBar').querySelectorAll('button[data-tab]').forEach(b => {
+    b.onclick = () => {
+      jobActiveTab = b.dataset.tab;
+      $('statusFilter').value = ''; // tab and dropdown filter are mutually exclusive
+      if (jobsHasIssueLog && jobActiveTab === 'issues') { showIssuesPanel(); }
+      else { showJobsTable(); loadJobs(); }
+    };
+  });
+}
+function showIssuesPanel() {
+  $('jobsToolbar').style.display = 'none';
+  $('jobsTable').style.display = 'none';
+  $('emptyState').style.display = 'none';
+  $('summaryStats').style.display = 'none';
+  $('issuesPanel').style.display = 'block';
+  loadIssuesPanel();
+}
+function showJobsTable() {
+  $('issuesPanel').style.display = 'none';
+  $('jobsToolbar').style.display = 'flex';
+  $('jobsTable').style.display = 'table';
+  $('summaryStats').style.display = 'flex';
+}
 async function loadJobs() {
   const params = new URLSearchParams();
   const office = $('officeSwitcher').value, status = $('statusFilter').value, search = $('searchInput').value.trim();
   if (office) params.set('office', office);
-  if (status) params.set('status', status);
+  if (jobActiveTab) params.set('tab', jobActiveTab);
+  else if (status) params.set('status', status);
   if (search) params.set('search', search);
   $('jobsBody').innerHTML = `<tr class="loading-row"><td colspan="8">Loading jobs…</td></tr>`;
   const { jobs } = await api(`/jobs?${params.toString()}`);
@@ -2198,7 +2383,112 @@ async function loadJobs() {
     UNREAD = {}; unread.forEach(u => UNREAD[u.job_id] = u.unread);
   } catch (e) { UNREAD = {}; }
   renderJobs();
+  loadJobTabCounts();
 }
+
+// ---- Issues on Hand (branch offices only) — a real open/resolved issue
+// log against jobs (job_issues table), independent of a job's status. ----
+let ISSUE_TYPE_COLORS = { Repair: ['#7a3a00','#fff3e0','#ffcc80'], Replace: ['#7a1f1f','#fdecea','#f5b5ae'], Other: ['#374151','#eef0f3','#cfd4da'] };
+function issueTypeBadge(t) {
+  const m = ISSUE_TYPE_COLORS[t] || ISSUE_TYPE_COLORS.Other;
+  return `<span class="issue-type-badge" style="background:${m[1]};color:${m[0]};border:1px solid ${m[2]}">${escapeHtml(t || 'Other')}</span>`;
+}
+function fmtIssueDate(v) { if (!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(); }
+let ISSUES_CACHE = [];
+async function loadIssuesPanel() {
+  const office = $('officeSwitcher').value;
+  const includeResolved = $('issueShowResolvedChk').checked;
+  const params = new URLSearchParams(); if (office) params.set('office', office); if (includeResolved) params.set('includeResolved', 'true');
+  $('issueLogList').innerHTML = `<div class="issue-empty">Loading…</div>`;
+  const { issues } = await api(`/issues?${params.toString()}`);
+  ISSUES_CACHE = issues;
+  renderIssuesPanel();
+}
+function renderIssuesPanel() {
+  const open = ISSUES_CACHE.filter(i => i.status === 'open');
+  const resolved = ISSUES_CACHE.filter(i => i.status === 'resolved');
+  let html = '';
+  if (!open.length) {
+    html += `<div class="issue-empty"><h3>No open issues 🎉</h3><p>Faulty pieces needing repair or replacement show up here so they don't get missed.</p></div>`;
+  } else {
+    html += `<div class="issue-section-label">Open issues — ${open.length}</div>` + open.map(i => issueCardHtml(i, false)).join('');
+  }
+  if ($('issueShowResolvedChk').checked && resolved.length) {
+    html += `<div class="issue-section-label" style="margin-top:20px">Resolved — ${resolved.length}</div>` + resolved.map(i => issueCardHtml(i, true)).join('');
+  }
+  $('issueLogList').innerHTML = html;
+}
+function issueCardHtml(i, resolved) {
+  return `<div class="issue-card${resolved ? ' resolved' : ''}">
+    <div>
+      <div class="issue-card-head">
+        <button class="issue-jobname" onclick="openJobDetail('${i.job_id}')">${escapeHtml(i.job_name || '(untitled)')}</button>
+        ${issueTypeBadge(i.issue_type)}
+        <span style="font-size:11px;color:var(--text2)">${escapeHtml(i.job_status_label || '')}</span>
+      </div>
+      <div class="issue-meta">${i.contact_person ? escapeHtml(i.contact_person) + ' · ' : ''}${i.po_number ? 'PO ' + escapeHtml(i.po_number) + ' · ' : ''}Flagged ${fmtIssueDate(i.opened_at)}${resolved ? ' · Resolved ' + fmtIssueDate(i.resolved_at) : ''}</div>
+      <div class="issue-reason">${escapeHtml(i.description || '')}</div>
+    </div>
+    <div class="issue-card-actions">
+      ${resolved
+        ? `<button class="btn-ghost btn-sm" onclick="reopenIssue('${i.id}')">↩ Reopen</button>`
+        : `<button class="btn-primary btn-sm" onclick="resolveIssueRow('${i.id}')">✓ Resolve</button>`}
+    </div>
+  </div>`;
+}
+$('issueShowResolvedChk').onchange = loadIssuesPanel;
+async function resolveIssueRow(issueId) {
+  try { await api(`/issues/${issueId}`, { method: 'PATCH', body: JSON.stringify({ action: 'resolve' }) }); toast('Issue resolved.'); await loadIssuesPanel(); await loadJobTabCounts(); }
+  catch (e) { toast(e.message); }
+}
+async function reopenIssue(issueId) {
+  try { await api(`/issues/${issueId}`, { method: 'PATCH', body: JSON.stringify({ action: 'reopen' }) }); toast('Issue reopened.'); await loadIssuesPanel(); await loadJobTabCounts(); }
+  catch (e) { toast(e.message); }
+}
+let issuePickJobId = null;
+function openIssuePicker() {
+  issuePickJobId = null;
+  $('issuePickerOverlay').classList.add('open');
+  $('issuePickSearchWrap').style.display = '';
+  $('issueFormWrap').style.display = 'none';
+  $('issuePickSearch').value = '';
+  $('issueDescription').value = '';
+  $('issueType').value = 'Repair';
+  issuePickFilter('');
+}
+function closeIssuePicker() { $('issuePickerOverlay').classList.remove('open'); issuePickJobId = null; }
+$('issueLogAddBtn').onclick = openIssuePicker;
+async function issuePickFilter(q) {
+  q = (q || '').trim();
+  const params = new URLSearchParams(); if (q) params.set('search', q); params.set('limit', '30');
+  const office = $('officeSwitcher').value; if (office) params.set('office', office);
+  const { jobs } = await api(`/jobs?${params.toString()}`);
+  const box = $('issuePickResults');
+  if (!jobs.length) { box.innerHTML = `<div style="padding:14px;color:var(--text2);font-size:13px">No jobs match that search.</div>`; return; }
+  box.innerHTML = jobs.map(j => `
+    <button type="button" class="issue-pick-row${String(j.id) === String(issuePickJobId) ? ' sel' : ''}" onclick="selectIssueJob('${j.id}', '${escapeHtml(j.job_name).replace(/'/g, "\\'")}')">
+      <div style="font-weight:600">${escapeHtml(j.job_name)}</div>
+      <div style="color:var(--text2);font-size:11.5px">${escapeHtml(j.contact_person || '')} · ${escapeHtml(j.status_label || '')}</div>
+    </button>`).join('');
+}
+function selectIssueJob(jobId, jobName) {
+  issuePickJobId = jobId;
+  $('issueFormJob').textContent = 'For: ' + jobName;
+  $('issueFormWrap').style.display = 'block';
+}
+async function saveIssue() {
+  if (!issuePickJobId) { toast('Pick a job first.'); return; }
+  const description = $('issueDescription').value.trim();
+  if (!description) { toast('Add a short description.'); $('issueDescription').focus(); return; }
+  try {
+    await api(`/jobs/${issuePickJobId}/issues`, { method: 'POST', body: JSON.stringify({ issueType: $('issueType').value, description }) });
+    toast('Issue flagged.');
+    closeIssuePicker();
+    await loadIssuesPanel();
+    await loadJobTabCounts();
+  } catch (e) { toast(e.message); }
+}
+
 let SELECTED_JOB_IDS = new Set();
 function renderJobs() {
   const body = $('jobsBody');
@@ -2222,9 +2512,10 @@ function renderJobs() {
     cb.onchange = () => { cb.checked ? SELECTED_JOB_IDS.add(cb.dataset.select) : SELECTED_JOB_IDS.delete(cb.dataset.select); };
   });
   staggerIn(body, 'tr.job-row');
+  renderSummaryStats();
 }
 $('searchInput').addEventListener('input', debounce(loadJobs, 350));
-$('statusFilter').onchange = loadJobs;
+$('statusFilter').onchange = () => { jobActiveTab = ''; loadJobs(); };
 
 async function changeStatus(jobId, statusCode, selEl) {
   try {

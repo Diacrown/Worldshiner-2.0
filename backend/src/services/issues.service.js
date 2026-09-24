@@ -1,5 +1,33 @@
 import { pool, withTransaction } from '../db/pool.js';
 import { getJobById } from './jobs.service.js';
+import { buildScope } from './scope.js';
+
+// Powers the branch "Issues on Hand" panel — every open (or, with
+// includeResolved, resolved too) issue across every job in the viewer's
+// scope, not just one job's. This is the real feature the old Sydney
+// tracker's "+ Add issue / Show resolved / Resolve" panel was built on
+// (job_issues table) — separate from the dashboard tabs entirely, since a
+// job's current production status and whether it has an open issue are
+// independent facts (see jobTabs.js's header comment).
+export async function listOpenIssuesForScope(user, { officeOverride, includeResolved = false } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const statusClause = includeResolved ? '' : `${where ? ' AND' : ' WHERE'} i.status = 'open'`;
+  const sql = `
+    SELECT i.*, u1.display_name AS opened_by_name, u2.display_name AS resolved_by_name,
+      j.job_name, j.contact_person, j.po_number, j.status_code AS job_status_code,
+      bs.label AS job_status_label, o.code AS office_code
+    FROM job_issues i
+    JOIN jobs j ON j.id = i.job_id
+    JOIN offices o ON o.id = j.office_id
+    JOIN branch_statuses bs ON bs.code = j.status_code
+    LEFT JOIN users u1 ON u1.id = i.opened_by_user_id
+    LEFT JOIN users u2 ON u2.id = i.resolved_by_user_id
+    ${where}${statusClause}
+    ORDER BY i.status = 'open' DESC, i.opened_at DESC
+  `;
+  const { rows } = await pool.query(sql, params);
+  return rows;
+}
 
 export async function listIssues(user, jobId) {
   const job = await getJobById(user, jobId);

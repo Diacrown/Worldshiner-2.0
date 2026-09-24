@@ -9,17 +9,45 @@ jobsRouter.use(requireAuth);
 
 jobsRouter.get('/', async (req, res, next) => {
   try {
-    const { office, view, status, search, clientPrefix, limit, offset } = req.query;
+    const { office, view, status, tab, search, clientPrefix, limit, offset } = req.query;
     const jobs = await JobsService.listJobs(req.user, {
       officeOverride: office,
       ownerView: view,
       status,
+      tab,
       search,
       clientPrefix,
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });
     res.json({ jobs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.get('/tab-counts', async (req, res, next) => {
+  try {
+    const result = await JobsService.getJobTabCounts(req.user, { officeOverride: req.query.office });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.get('/office-counts', async (req, res, next) => {
+  try {
+    const result = await JobsService.getOfficeCounts(req.user);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+jobsRouter.get('/phase-counts', async (req, res, next) => {
+  try {
+    const result = await JobsService.getPhaseCounts(req.user);
+    res.json(result);
   } catch (err) {
     next(err);
   }

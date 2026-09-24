@@ -25,13 +25,14 @@ const OFFICES = [
   { code: 'WS-POL', name: 'Poland', is_hq: false, org: 'DIACROWN', letter_prefix: 'P', next_design_value: 1 },
   { code: 'DM-USA', name: 'Texas', is_hq: false, org: 'DIACROWN', letter_prefix: 'T', next_design_value: 572 },
   { code: 'WS-IT', name: 'Italy', is_hq: false, org: 'DIACROWN', letter_prefix: 'I', next_design_value: 1 },
-  { code: 'DM-GER', name: 'Germany', is_hq: false, org: 'DIACROWN', letter_prefix: 'G', next_design_value: 1 },
   { code: 'HQ', name: 'Head Office / India (Diacrown)', is_hq: true, org: 'DIACROWN' },
-  // DIAMORE: real infra doesn't exist yet for either of these — placeholders
-  // so the org layer and its scoping rules can be built and tested now.
-  // Rename DM-LOC1 to the actual location's real code once it's confirmed.
+  // DIAMORE: Germany (DM-GER) is Diamore's real, currently-used location —
+  // moved here from Diacrown (see migration 020). DM-LOC1 remains an
+  // unconfirmed placeholder (active: false) so it stays out of the office
+  // switcher and the office-breakdown bar until it's a real location.
+  { code: 'DM-GER', name: 'Germany', is_hq: false, org: 'DIAMORE', letter_prefix: 'G', next_design_value: 1 },
   { code: 'DM-HQ', name: 'Head Office / India (Diamore)', is_hq: true, org: 'DIAMORE' },
-  { code: 'DM-LOC1', name: 'Diamore Location 1 (placeholder — rename once confirmed)', is_hq: false, org: 'DIAMORE', letter_prefix: 'D', next_design_value: 1 },
+  { code: 'DM-LOC1', name: 'Diamore Location 1 (placeholder — rename once confirmed)', is_hq: false, org: 'DIAMORE', letter_prefix: 'D', next_design_value: 1, active: false },
 ];
 
 // code, label, sort_order, is_system_only, is_archive
@@ -64,6 +65,7 @@ const BRANCH_STATUSES = [
   ['in_repair', 'In Repair', 190, false, false],
   ['job_delayed', 'Job Delayed', 200, true, false], // system-only — HQ's QC Repair headlines here
   ['ready_to_ship', 'Ready to Ship', 210, true, false], // system-only — HQ's QC Pass headlines here
+  ['ready_to_dispatch', 'Ready to Dispatch', 215, false, false], // ported from old Sydney tracker's Production tab (see migration 019)
   ['in_transit', 'In Transit', 220, false, false],
   ['shipped_india', 'Shipped - India', 230, false, false],
   ['in_setting', 'In Setting', 240, false, false],
@@ -83,10 +85,13 @@ const HQ_STATUSES = [
   ['quote_expired', 'Quote Expired', 60],
   ['approved', 'Approved', 70],
   ['po_ready', 'Po ready', 80],
+  ['sketch_request', 'Sketch Request', 95], // ported from old India tracker's "Cad Pending" tab (see migration 017)
   ['cad_mod_order_confirmed', 'After CAD modify order confirmed', 90],
   ['new_cad_requested', 'New CAD Requested', 100],
+  ['cad_requested', 'CAD Requested', 97], // ported from old India tracker's "Cad Pending" tab (see migration 017)
   ['cad_mod_requested', 'CAD Mod Requested', 110],
   ['new_render_request', 'New Render Request', 120],
+  ['render_requested', 'Render Requested', 125], // ported from old India tracker's "Cad Pending" tab (see migration 017)
   ['order_pending', 'Order Pending', 130],
   ['in_production', 'In Production', 140],
   ['new_wax_request', 'New Wax Req.', 145],
@@ -100,6 +105,8 @@ const HQ_STATUSES = [
   ['modifying_cad', 'Modifying CAD', 220],
   ['render_submitted', 'Render Submitted', 230],
   ['qc_pass', 'QC Pass', 240],
+  ['qc_pass_hold_for_set', 'QC Pass hold for set', 241], // ported from old India tracker's "Ready to Ship" tab (see migration 017)
+  ['complaint', 'Complaint', 245], // ported for the dashboard tab bar's "Issues" tab (see migration 018)
   ['shipped', 'Shipped', 250],
   ['closed', 'Closed', 260],
 ];
@@ -162,17 +169,17 @@ async function seed() {
     for (const o of OFFICES) {
       const { rows: orgRows } = await client.query('SELECT id FROM orgs WHERE code = $1', [o.org]);
       await client.query(
-        `INSERT INTO offices (code, name, is_hq, org_id, has_assay_office, letter_prefix, next_design_value)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO offices (code, name, is_hq, org_id, has_assay_office, letter_prefix, next_design_value, active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, is_hq = EXCLUDED.is_hq, org_id = EXCLUDED.org_id,
-           has_assay_office = EXCLUDED.has_assay_office,
+           has_assay_office = EXCLUDED.has_assay_office, active = EXCLUDED.active,
            -- Backfill letter_prefix/next_design_value only the FIRST time an
            -- existing office row gets one (i.e. it's currently NULL) — once
            -- set, re-seeding must never reset a counter that's already live
            -- and incrementing.
            letter_prefix = COALESCE(offices.letter_prefix, EXCLUDED.letter_prefix),
            next_design_value = CASE WHEN offices.letter_prefix IS NULL THEN EXCLUDED.next_design_value ELSE offices.next_design_value END`,
-        [o.code, o.name, o.is_hq, orgRows[0].id, !!o.has_assay_office, o.letter_prefix || null, o.next_design_value || 1]
+        [o.code, o.name, o.is_hq, orgRows[0].id, !!o.has_assay_office, o.letter_prefix || null, o.next_design_value || 1, o.active !== false]
       );
     }
     console.log(`[seed] offices: ${OFFICES.length}`);
@@ -221,6 +228,7 @@ async function seed() {
     const demoUsers = [
       { email: 'admin@worldshiner.demo', display_name: 'Demo Super Admin', office: 'HQ', is_global_admin: true },
       { email: 'diacrown.orgadmin@worldshiner.demo', display_name: 'Demo Diacrown Org Admin', office: 'HQ', is_org_admin: true },
+      { email: 'diamore.orgadmin@worldshiner.demo', display_name: 'Demo Diamore Org Admin', office: 'DM-HQ', is_org_admin: true },
       { email: 'texas.master@worldshiner.demo', display_name: 'Demo Texas Master', office: 'DM-USA', is_office_master: true },
       { email: 'texas.staff@worldshiner.demo', display_name: 'Demo Texas Staff', office: 'DM-USA' },
       { email: 'sydney.staff@worldshiner.demo', display_name: 'Demo Sydney Staff', office: 'WS-SYD' },

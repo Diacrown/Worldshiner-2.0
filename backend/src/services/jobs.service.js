@@ -3,18 +3,36 @@ import { getBranchToHqStatus, getHqToBranchHeadline, getBranchStatus } from './s
 import { jobNeedsSettingCharge, evaluateSettingChargeGuard } from './settingChargeGuard.js';
 import { buildScope } from './scope.js';
 import { getClientDirectory, levenshtein } from './clients.service.js';
+import { tabsForUser, statusesForTab, resolveViewingHq, HQ_PHASES, HQ_PHASES_EXCLUDE_STATUSES } from './jobTabs.js';
 
-export async function listJobs(user, { officeOverride, ownerView, status, search, clientPrefix, limit = 100, offset = 0 } = {}) {
+export async function listJobs(user, { officeOverride, ownerView, status, tab, search, clientPrefix, limit = 100, offset = 0 } = {}) {
   const { where, params } = buildScope(user, { officeOverride, ownerView });
+  const viewingHq = await resolveViewingHq(user, officeOverride);
+  // The Status column shown in the table has to match whichever world the
+  // tabs above it are drawn from — a job listed under an HQ tab needs its
+  // HQ status shown, not its branch status, or the two would visibly
+  // contradict each other the moment someone drills between office levels.
   let sql = `
-    SELECT j.*, o.code AS office_code, o.name AS office_name, bs.label AS status_label
+    SELECT j.*, o.code AS office_code, o.name AS office_name,
+      ${viewingHq ? 'hs.label' : 'bs.label'} AS status_label
     FROM jobs j
     JOIN offices o ON o.id = j.office_id
     JOIN branch_statuses bs ON bs.code = j.status_code
+    LEFT JOIN hq_statuses hs ON hs.code = j.hq_status_code
     ${where}
   `;
   const extra = [];
-  if (status) {
+  if (tab) {
+    // Dashboard tab bar — filters by a group of statuses on whichever
+    // column matches the CURRENTLY VIEWED office's tab set (hq_status_code
+    // at HQ level, status_code once drilled into a specific branch — see
+    // jobTabs.js's resolveViewingHq).
+    const resolved = statusesForTab(user, tab, viewingHq);
+    if (resolved) {
+      params.push(resolved.statuses);
+      extra.push(`j.${resolved.statusColumn} = ANY($${params.length}::text[])`);
+    }
+  } else if (status) {
     params.push(status);
     extra.push(`j.status_code = $${params.length}`);
   }
@@ -39,6 +57,142 @@ export async function listJobs(user, { officeOverride, ownerView, status, search
 
   const { rows } = await pool.query(sql, params);
   return rows;
+}
+
+// Dashboard tab bar counts — one query, grouped by whichever status column
+// applies to this viewer, mapped through jobTabs.js's tab definitions. A
+// status that exists in the DB but isn't in any tab (shouldn't happen once
+// jobTabs.js accounts for every status.js code, but a schema could drift
+// ahead of it) is silently excluded from every tab's count rather than
+// thrown — the "All Jobs" total below still includes it, so a mismatch
+// between "All Jobs" and the sum of tab counts is the signal something in
+// jobTabs.js needs updating.
+export async function getJobTabCounts(user, { officeOverride } = {}) {
+  const { where, params } = buildScope(user, { officeOverride });
+  const viewingHq = await resolveViewingHq(user, officeOverride);
+  const { tabs, statusColumn, allJobsExcludes, hasIssueLog } = tabsForUser(user, viewingHq);
+
+  // "All Jobs" means different things per side — HQ's old tracker excludes
+  // Shipped/Closed (it's meant as "active work"); the branch tracker's old
+  // `all: null` was genuinely unfiltered. Both confirmed directly against
+  // the old files' own code, not guessed.
+  let totalSql = `SELECT count(*)::int AS n FROM jobs j ${where}`;
+  const totalParams = [...params];
+  if (allJobsExcludes.length) {
+    totalParams.push(allJobsExcludes);
+    totalSql += `${where ? ' AND' : ' WHERE'} j.${statusColumn} != ALL($${totalParams.length}::text[])`;
+  }
+  const totalResult = await pool.query(totalSql, totalParams);
+
+  const caseLines = tabs.map((t, i) => {
+    const placeholder = `$${params.length + i + 1}`;
+    return `WHEN j.${statusColumn} = ANY(${placeholder}::text[]) THEN '${t.id}'`;
+  }).join('\n      ');
+  const tabParams = [...params, ...tabs.map((t) => t.statuses)];
+  const countSql = `
+    SELECT
+      CASE ${caseLines} END AS tab_id,
+      count(*)::int AS n
+    FROM jobs j
+    ${where}
+    GROUP BY 1
+  `;
+  const { rows } = await pool.query(countSql, tabParams);
+  const countsByTab = Object.fromEntries(rows.filter((r) => r.tab_id).map((r) => [r.tab_id, r.n]));
+
+  const resultTabs = tabs.map((t) => ({ id: t.id, label: t.label, count: countsByTab[t.id] || 0 }));
+
+  // Branch offices' "Issues on Hand" isn't a status group at all — it's the
+  // count of open job_issues rows for jobs in this scope. Appended as its
+  // own entry so the frontend can render it in the same row, but the
+  // frontend must treat clicking it differently (opens the issues panel,
+  // not a filtered jobs table) — see hasIssueLog in the response.
+  if (hasIssueLog) {
+    const issuesSql = `
+      SELECT count(*)::int AS n
+      FROM job_issues i
+      JOIN jobs j ON j.id = i.job_id
+      ${where}${where ? ' AND' : ' WHERE'} i.status = 'open'
+    `;
+    const issuesResult = await pool.query(issuesSql, params);
+    resultTabs.push({ id: 'issues', label: 'Issues on Hand', count: issuesResult.rows[0].n });
+  }
+
+  return { total: totalResult.rows[0].n, tabs: resultTabs, hasIssueLog };
+}
+
+// Office/branch breakdown bar — HQ-only (a branch user only ever has one
+// office, so this bar has nothing to show them). Scoped to the viewer's own
+// org (a Diacrown HQ user never sees Diamore's offices and vice versa,
+// matching buildScope's org isolation everywhere else). Excludes the HQ
+// office itself (jobs are never logged directly against HQ — only against
+// a branch, exactly like the old India tracker's office bar never had an
+// "HQ" pill) and excludes inactive/placeholder offices (see migration 020 —
+// Diamore's DM-LOC1 stays hidden here until it's a real, confirmed location).
+export async function getOfficeCounts(user) {
+  if (!(user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq)) return { offices: [] };
+  // Built directly rather than via buildScope() — that helper assumes
+  // `jobs` is the base table being filtered; here `offices` is the base
+  // table (so a zero-job office still shows up), which needs the org
+  // restriction applied to the offices table itself, not just to which
+  // jobs get counted.
+  const params = [];
+  let orgClause = '';
+  if (!user.isGlobalAdmin) {
+    params.push(user.orgId);
+    orgClause = `AND o.org_id = $${params.length}`;
+  }
+  let ownerClause = '';
+  if (user.restrictToOwnJobs) {
+    params.push(user.sub);
+    ownerClause = `AND j.owner_user_id = $${params.length}`;
+  }
+  const sql = `
+    SELECT o.code, o.name, count(j.id)::int AS n
+    FROM offices o
+    LEFT JOIN jobs j ON j.office_id = o.id ${ownerClause}
+    WHERE o.is_hq = FALSE AND o.active = TRUE ${orgClause}
+    GROUP BY o.id, o.code, o.name
+    ORDER BY o.name
+  `;
+  const { rows } = await pool.query(sql, params);
+  return { offices: rows.map((r) => ({ code: r.code, name: r.name, count: r.n })) };
+}
+
+// Summary stat line's "In production / CAD stage / QC" — HQ-only, org-scoped,
+// deliberately ignoring whatever tab/office/search filter is currently
+// active (matches the old India tracker exactly — see jobTabs.js's
+// HQ_PHASES comment for why). "Jobs shown" and branch's "Invoice total"
+// don't need a backend call at all — they're computed client-side from
+// whatever's already loaded in the visible table.
+export async function getPhaseCounts(user) {
+  if (!(user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq)) return { cad: 0, prod: 0, qc: 0 };
+  const params = [];
+  let orgClause = '';
+  if (!user.isGlobalAdmin) {
+    params.push(user.orgId);
+    orgClause = `AND j.office_id IN (SELECT id FROM offices WHERE org_id = $${params.length})`;
+  }
+  let ownerClause = '';
+  if (user.restrictToOwnJobs) {
+    params.push(user.sub);
+    ownerClause = `AND j.owner_user_id = $${params.length}`;
+  }
+  const excludeIdx = params.length + 1;
+  params.push(HQ_PHASES_EXCLUDE_STATUSES);
+  const phaseIdx = { cad: params.length + 1, prod: params.length + 2, qc: params.length + 3 };
+  params.push(HQ_PHASES.cad, HQ_PHASES.prod, HQ_PHASES.qc);
+  const sql = `
+    SELECT
+      count(*) FILTER (WHERE j.hq_status_code = ANY($${phaseIdx.cad}::text[]))::int AS cad,
+      count(*) FILTER (WHERE j.hq_status_code = ANY($${phaseIdx.prod}::text[]))::int AS prod,
+      count(*) FILTER (WHERE j.hq_status_code = ANY($${phaseIdx.qc}::text[]))::int AS qc
+    FROM jobs j
+    WHERE j.hq_status_code IS NOT NULL AND j.hq_status_code != ALL($${excludeIdx}::text[])
+    ${orgClause} ${ownerClause}
+  `;
+  const { rows } = await pool.query(sql, params);
+  return { cad: rows[0].cad, prod: rows[0].prod, qc: rows[0].qc };
 }
 
 export async function getJobById(user, jobId) {

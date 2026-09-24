@@ -6,6 +6,24 @@
 // alerts, reports) reuse it instead of re-deriving it per file — exactly the
 // duplication pattern docs/ARCHITECTURE.md documents as the old system's
 // root-cause bug class.
+//
+// Selecting an office in the switcher can mean two different things: a real
+// branch office ("show me Sydney's jobs") or an HQ office row ("show me
+// every job across all of Diacrown's/Diamore's locations combined"). Jobs
+// are never filed directly against HQ, so a naive exact office_id match on
+// an HQ code always returns zero rows — officeOverrideExpansion() below
+// expands an HQ code into "every office sharing its org_id" instead of
+// matching it literally. This is what let the office switcher drop its old
+// separate "All offices" option — selecting an org's own HQ row now IS
+// that org's "all offices" view.
+function officeOverrideExpansion(paramIndexForCode, extraOrgConstraintSql = '') {
+  return `j.office_id IN (
+    SELECT o2.id FROM offices o2
+    JOIN offices sel ON sel.code = $${paramIndexForCode}${extraOrgConstraintSql}
+    WHERE (sel.is_hq AND o2.org_id = sel.org_id) OR (NOT sel.is_hq AND o2.id = sel.id)
+  )`;
+}
+
 export function buildScope(user, { officeOverride, ownerView } = {}) {
   const clauses = [];
   const params = [];
@@ -14,7 +32,7 @@ export function buildScope(user, { officeOverride, ownerView } = {}) {
     // True super admin — every org, every office.
     if (officeOverride) {
       params.push(officeOverride);
-      clauses.push(`j.office_id = (SELECT id FROM offices WHERE code = $${params.length})`);
+      clauses.push(officeOverrideExpansion(params.length));
     }
   } else if (user.isOrgAdmin || user.officeIsHq) {
     // Org admin or HQ staff — every office WITHIN THEIR OWN ORG only. This is
@@ -27,7 +45,7 @@ export function buildScope(user, { officeOverride, ownerView } = {}) {
     let clause = `j.office_id IN (SELECT id FROM offices WHERE org_id = $${params.length})`;
     if (officeOverride) {
       params.push(officeOverride, user.orgId);
-      clause = `j.office_id = (SELECT id FROM offices WHERE code = $${params.length - 1} AND org_id = $${params.length})`;
+      clause = officeOverrideExpansion(params.length - 1, ` AND sel.org_id = $${params.length}`);
     }
     clauses.push(clause);
   } else {

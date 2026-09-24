@@ -5,6 +5,18 @@ import * as IssuesService from '../services/issues.service.js';
 export const issuesRouter = Router();
 issuesRouter.use(requireAuth);
 
+issuesRouter.get('/issues', async (req, res, next) => {
+  try {
+    const issues = await IssuesService.listOpenIssuesForScope(req.user, {
+      officeOverride: req.query.office,
+      includeResolved: req.query.includeResolved === 'true',
+    });
+    res.json({ issues });
+  } catch (err) {
+    next(err);
+  }
+});
+
 issuesRouter.get('/jobs/:jobId/issues', async (req, res, next) => {
   try {
     const issues = await IssuesService.listIssues(req.user, req.params.jobId);
