@@ -129,7 +129,7 @@ export async function getJobTabCounts(user, { officeOverride } = {}) {
 // a branch, exactly like the old India tracker's office bar never had an
 // "HQ" pill) and excludes inactive/placeholder offices (see migration 020 —
 // Diamore's DM-LOC1 stays hidden here until it's a real, confirmed location).
-export async function getOfficeCounts(user) {
+export async function getOfficeCounts(user, { officeOverride } = {}) {
   if (!(user.isGlobalAdmin || user.isOrgAdmin || user.officeIsHq)) return { offices: [] };
   // Built directly rather than via buildScope() — that helper assumes
   // `jobs` is the base table being filtered; here `offices` is the base
@@ -141,6 +141,23 @@ export async function getOfficeCounts(user) {
   if (!user.isGlobalAdmin) {
     params.push(user.orgId);
     orgClause = `AND o.org_id = $${params.length}`;
+  } else {
+    // Global Admin is the only role that can step into either company, but
+    // once they're looking at one, "All" must mean "all of THIS org" —
+    // never a blended total across two separate businesses. Resolve which
+    // org that is from whichever office is currently selected in the
+    // switcher; with nothing selected yet, default to whichever org sorts
+    // first (matches the dropdown's own default selection).
+    const { rows: orgRows } = await pool.query(
+      officeOverride
+        ? 'SELECT org_id FROM offices WHERE code = $1'
+        : 'SELECT id AS org_id FROM orgs ORDER BY code LIMIT 1',
+      officeOverride ? [officeOverride] : []
+    );
+    if (orgRows[0]) {
+      params.push(orgRows[0].org_id);
+      orgClause = `AND o.org_id = $${params.length}`;
+    }
   }
   let ownerClause = '';
   if (user.restrictToOwnJobs) {

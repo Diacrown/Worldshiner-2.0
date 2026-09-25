@@ -37,7 +37,7 @@ jobsRouter.get('/tab-counts', async (req, res, next) => {
 
 jobsRouter.get('/office-counts', async (req, res, next) => {
   try {
-    const result = await JobsService.getOfficeCounts(req.user);
+    const result = await JobsService.getOfficeCounts(req.user, { officeOverride: req.query.office });
     res.json(result);
   } catch (err) {
     next(err);

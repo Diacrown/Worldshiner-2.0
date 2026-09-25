@@ -2253,7 +2253,23 @@ async function loadOffices() {
   // via buildScope's HQ-code expansion (see scope.js). The list already
   // sorts HQ rows first within their org, so the browser's natural
   // first-option default lands on exactly the right "home" view.
-  sel.innerHTML = offices.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' — ' + o.org_code : ''}</option>`).join('');
+  //
+  // Global Admin is the only viewer who ever sees more than one org_code in
+  // this list — grouped into <optgroup>s so the two companies read as
+  // visually distinct, not one flat mixed list. Everyone else's list only
+  // ever has a single org anyway, so this renders identically to before.
+  const orgCodes = [...new Set(offices.map((o) => o.org_code).filter(Boolean))];
+  if (orgCodes.length > 1) {
+    sel.innerHTML = orgCodes.map((code) => {
+      const group = offices.filter((o) => o.org_code === code);
+      const orgName = group[0].org_name || code;
+      return `<optgroup label="${escapeHtml(orgName)}">` +
+        group.map((o) => `<option value="${o.code}">${escapeHtml(o.name)}</option>`).join('') +
+        `</optgroup>`;
+    }).join('');
+  } else {
+    sel.innerHTML = offices.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' — ' + o.org_code : ''}</option>`).join('');
+  }
   // Switching office can change which tab WORLD applies (HQ 10-tab vs a
   // branch's own 6-tab set) — a tab id valid in one doesn't exist in the
   // other, so always drop back to "All Jobs" rather than risk silently
@@ -2300,12 +2316,19 @@ async function loadJobTabCounts() {
 async function loadOfficeBar() {
   const bar = $('officeBar');
   if (!(USER.isGlobalAdmin || USER.isOrgAdmin)) { bar.style.display = 'none'; return; }
+  // Gone entirely once a specific branch is selected — jobsHasIssueLog is
+  // only true when the branch tab world is active (see jobTabs.js), which
+  // happens exactly when the currently viewed office isn't an HQ row.
+  // Nothing left to break down once you've already picked one office.
+  if (jobsHasIssueLog) { bar.style.display = 'none'; return; }
   // "All" means "my own org's HQ view" now that the office switcher has no
   // separate all-offices sentinel — USER.officeCode IS that org's HQ code
   // for any real HQ staff member (see scope.js's HQ-code expansion).
   const homeCode = USER.officeCode;
   try {
-    const { offices } = await api('/jobs/office-counts');
+    const office = $('officeSwitcher').value;
+    const params = new URLSearchParams(); if (office) params.set('office', office);
+    const { offices } = await api(`/jobs/office-counts?${params.toString()}`);
     if (!offices.length) { bar.style.display = 'none'; return; }
     const current = $('officeSwitcher').value;
     bar.innerHTML = `<span class="office-bar-label">Office</span>` +
