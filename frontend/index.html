@@ -364,6 +364,7 @@
             <tbody id="jobsBody"></tbody>
           </table>
           <div class="empty" id="emptyState" style="display:none">No jobs yet — create the first one.</div>
+          <div style="text-align:center;margin:14px 0" id="loadMoreWrap"><button class="btn-ghost" id="loadMoreBtn" style="display:none">Load more</button></div>
 
           <div id="issuesPanel" style="display:none">
             <div class="issues-bar">
@@ -923,6 +924,10 @@ let TOKEN = localStorage.getItem('ws2_token') || null;
 let USER = JSON.parse(localStorage.getItem('ws2_user') || 'null');
 let STATUSES = [];
 let JOBS = [];
+let CAN_SWITCH = false;
+let JOB_OFFSET = 0;
+const JOB_PAGE_SIZE = 100;
+let JOB_HAS_MORE = false;
 let OFFICES = [];
 let CURRENT_JOB_ID = null;
 let UNREAD = {};
@@ -1185,6 +1190,25 @@ $('saveChangePassword').onclick = async () => {
   } catch (e) { toast(e.message); }
 };
 
+// HQ Alerts must only ever be reachable while sitting at an HQ level (any
+// org) -- never while drilled into a specific branch, and never for a role
+// that has no HQ access at all. A role with the office switcher (Org Admin,
+// Global Admin) can move between HQ and branch level at will, so this has
+// to be re-evaluated on every office change, not decided once at login.
+function updateHqAlertsVisibility() {
+  const nav = document.querySelector('[data-view="hqAlerts"]');
+  if (!(USER.isGlobalAdmin || USER.isOrgAdmin || USER.officeIsHq)) { nav.style.display = 'none'; return; }
+  let viewingHq = USER.officeIsHq;
+  if (CAN_SWITCH) {
+    const office = OFFICES.find(o => o.code === $('officeSwitcher').value);
+    viewingHq = office ? office.is_hq : USER.officeIsHq;
+  }
+  nav.style.display = viewingHq ? 'flex' : 'none';
+  // Bounce back to Jobs if HQ Alerts just became unreachable while open.
+  if (!viewingHq && $('hqAlertsView').style.display !== 'none') {
+    document.querySelector('[data-view="jobs"]').click();
+  }
+}
 async function showApp() {
   $('loginScreen').style.display = 'none'; $('app').style.display = 'block';
   startIdleTimer();
@@ -1196,6 +1220,7 @@ async function showApp() {
   // Admins and the Global Admin get that tool. Plain HQ staff still see
   // everything else HQ-related (tabs, summary stats, HQ Alerts, Reports).
   const canSwitch = USER.isGlobalAdmin || USER.isOrgAdmin;
+  CAN_SWITCH = canSwitch;
   const isAdmin = USER.isGlobalAdmin || USER.isOrgAdmin;
   const isHqOrAdmin = isAdmin || USER.officeIsHq;
   const canManageOwnMail = isHqOrAdmin || USER.isOfficeMaster;
@@ -1208,7 +1233,7 @@ async function showApp() {
   // inbox; HQ/org/global admin additionally sees every office's inbox.
   document.querySelector('[data-view="mail"]').style.display = canManageOwnMail ? 'flex' : 'none';
   document.querySelector('[data-view="sla"]').style.display = 'flex';
-  document.querySelector('[data-view="hqAlerts"]').style.display = USER.officeIsHq ? 'flex' : 'none';
+  updateHqAlertsVisibility();
   document.querySelector('[data-view="clients"]').style.display = 'flex';
   $('cli_mergeToolBtn').style.display = isHqOrAdmin ? 'inline-block' : 'none';
   const hasAssay = !!USER.officeHasAssay;
@@ -2274,7 +2299,7 @@ async function loadOffices() {
   // branch's own 6-tab set) — a tab id valid in one doesn't exist in the
   // other, so always drop back to "All Jobs" rather than risk silently
   // matching nothing (or the wrong thing) under a stale tab id.
-  sel.onchange = () => { jobActiveTab = ''; showJobsTable(); loadJobs(); loadJobTabCounts(); };
+  sel.onchange = () => { jobActiveTab = ''; showJobsTable(); loadJobs(); loadJobTabCounts(); updateHqAlertsVisibility(); };
 }
 async function loadStatuses() {
   const { statuses } = await api('/offices/statuses');
@@ -2391,16 +2416,23 @@ function showJobsTable() {
   $('jobsTable').style.display = 'table';
   $('summaryStats').style.display = 'flex';
 }
-async function loadJobs() {
+function jobsQueryParams(offset) {
   const params = new URLSearchParams();
   const office = $('officeSwitcher').value, status = $('statusFilter').value, search = $('searchInput').value.trim();
   if (office) params.set('office', office);
   if (jobActiveTab) params.set('tab', jobActiveTab);
   else if (status) params.set('status', status);
   if (search) params.set('search', search);
+  params.set('limit', JOB_PAGE_SIZE);
+  params.set('offset', offset);
+  return params;
+}
+async function loadJobs() {
+  JOB_OFFSET = 0;
   $('jobsBody').innerHTML = `<tr class="loading-row"><td colspan="8">Loading jobs…</td></tr>`;
-  const { jobs } = await api(`/jobs?${params.toString()}`);
+  const { jobs } = await api(`/jobs?${jobsQueryParams(0).toString()}`);
   JOBS = jobs;
+  JOB_HAS_MORE = jobs.length === JOB_PAGE_SIZE;
   try {
     const { unread } = await api('/chat/unread-counts');
     UNREAD = {}; unread.forEach(u => UNREAD[u.job_id] = u.unread);
@@ -2408,6 +2440,28 @@ async function loadJobs() {
   renderJobs();
   loadJobTabCounts();
 }
+// Appends the next page onto whatever's already shown, for every
+// office/tab/search/dropdown combination alike — same query, just a
+// higher offset. Button hides itself once a page comes back short.
+async function loadMoreJobs() {
+  const btn = $('loadMoreBtn');
+  const nextOffset = JOB_OFFSET + JOB_PAGE_SIZE;
+  btn.disabled = true; btn.textContent = 'Loading…';
+  try {
+    const { jobs } = await api(`/jobs?${jobsQueryParams(nextOffset).toString()}`);
+    JOBS = JOBS.concat(jobs);
+    JOB_OFFSET = nextOffset;
+    JOB_HAS_MORE = jobs.length === JOB_PAGE_SIZE;
+    try {
+      const { unread } = await api('/chat/unread-counts');
+      UNREAD = {}; unread.forEach(u => UNREAD[u.job_id] = u.unread);
+    } catch (e) { /* keep existing UNREAD on failure */ }
+    renderJobs();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Load more';
+  }
+}
+$('loadMoreBtn').onclick = loadMoreJobs;
 
 // ---- Issues on Hand (branch offices only) — a real open/resolved issue
 // log against jobs (job_issues table), independent of a job's status. ----
@@ -2535,6 +2589,7 @@ function renderJobs() {
     cb.onchange = () => { cb.checked ? SELECTED_JOB_IDS.add(cb.dataset.select) : SELECTED_JOB_IDS.delete(cb.dataset.select); };
   });
   staggerIn(body, 'tr.job-row');
+  $('loadMoreBtn').style.display = JOB_HAS_MORE ? 'inline-block' : 'none';
   renderSummaryStats();
 }
 $('searchInput').addEventListener('input', debounce(loadJobs, 350));
