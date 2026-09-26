@@ -9,9 +9,10 @@ jobsRouter.use(requireAuth);
 
 jobsRouter.get('/', async (req, res, next) => {
   try {
-    const { office, view, status, tab, search, clientPrefix, limit, offset } = req.query;
+    const { office, pillOffice, view, status, tab, search, clientPrefix, limit, offset } = req.query;
     const jobs = await JobsService.listJobs(req.user, {
       officeOverride: office,
+      pillOffice,
       ownerView: view,
       status,
       tab,
@@ -28,7 +29,7 @@ jobsRouter.get('/', async (req, res, next) => {
 
 jobsRouter.get('/tab-counts', async (req, res, next) => {
   try {
-    const result = await JobsService.getJobTabCounts(req.user, { officeOverride: req.query.office });
+    const result = await JobsService.getJobTabCounts(req.user, { officeOverride: req.query.office, pillOffice: req.query.pillOffice });
     res.json(result);
   } catch (err) {
     next(err);

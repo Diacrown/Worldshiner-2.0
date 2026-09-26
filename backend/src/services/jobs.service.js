@@ -5,8 +5,8 @@ import { buildScope } from './scope.js';
 import { getClientDirectory, levenshtein } from './clients.service.js';
 import { tabsForUser, statusesForTab, resolveViewingHq, HQ_PHASES, HQ_PHASES_EXCLUDE_STATUSES } from './jobTabs.js';
 
-export async function listJobs(user, { officeOverride, ownerView, status, tab, search, clientPrefix, limit = 100, offset = 0 } = {}) {
-  const { where, params } = buildScope(user, { officeOverride, ownerView });
+export async function listJobs(user, { officeOverride, pillOffice, ownerView, status, tab, search, clientPrefix, limit = 100, offset = 0 } = {}) {
+  const { where, params } = buildScope(user, { officeOverride, ownerView, pillOffice });
   const viewingHq = await resolveViewingHq(user, officeOverride);
   // The Status column shown in the table has to match whichever world the
   // tabs above it are drawn from — a job listed under an HQ tab needs its
@@ -67,8 +67,8 @@ export async function listJobs(user, { officeOverride, ownerView, status, tab, s
 // thrown — the "All Jobs" total below still includes it, so a mismatch
 // between "All Jobs" and the sum of tab counts is the signal something in
 // jobTabs.js needs updating.
-export async function getJobTabCounts(user, { officeOverride } = {}) {
-  const { where, params } = buildScope(user, { officeOverride });
+export async function getJobTabCounts(user, { officeOverride, pillOffice } = {}) {
+  const { where, params } = buildScope(user, { officeOverride, pillOffice });
   const viewingHq = await resolveViewingHq(user, officeOverride);
   const { tabs, statusColumn, allJobsExcludes, hasIssueLog } = tabsForUser(user, viewingHq);
 

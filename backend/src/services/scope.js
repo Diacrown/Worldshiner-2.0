@@ -24,7 +24,17 @@ function officeOverrideExpansion(paramIndexForCode, extraOrgConstraintSql = '') 
   )`;
 }
 
-export function buildScope(user, { officeOverride, ownerView } = {}) {
+// pillOffice is a SEPARATE, independent narrowing filter from officeOverride.
+// officeOverride decides WHICH WORLD you're in (an HQ code keeps you in that
+// org's combined view; a branch code switches you fully into that branch's
+// own view, tabs and all — see jobTabs.js's resolveViewingHq). pillOffice
+// never does that: it's the office-bar PILL, which only ever narrows the
+// CURRENT combined HQ world down to one branch's jobs, on top of whatever
+// officeOverride already scoped, without changing the tab world or the
+// office switcher's own value. Safe to pass unconditionally — it can only
+// ever narrow an already-scoped result, never widen it past what the rest
+// of buildScope already allows.
+export function buildScope(user, { officeOverride, ownerView, pillOffice } = {}) {
   const clauses = [];
   const params = [];
 
@@ -63,6 +73,11 @@ export function buildScope(user, { officeOverride, ownerView } = {}) {
   // Everyone else (ordinary staff, or a master with ownerView='all'): no
   // owner filter — sees every job in their office's scope. This matches the
   // old default ("everyone else … see all jobs, but no admin controls").
+
+  if (pillOffice) {
+    params.push(pillOffice);
+    clauses.push(`j.office_id = (SELECT id FROM offices WHERE code = $${params.length})`);
+  }
 
   return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
