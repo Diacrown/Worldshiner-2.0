@@ -875,12 +875,12 @@
       <div class="full"><label>Full name</label><input id="s_name"></div>
       <div class="full"><label>Email</label><input id="s_email" type="email"></div>
       <div class="full"><label>Temporary password</label><input id="s_password" type="text" placeholder="they can be given this to sign in with"></div>
-      <div><label>Office</label><select id="s_office"></select></div>
-      <div><label>Roles</label>
+      <div class="full"><label>Roles</label>
         <div class="checkline" id="s_admin_row"><input type="checkbox" id="s_admin"><label style="margin:0">Global admin (both orgs)</label></div>
         <div class="checkline"><input type="checkbox" id="s_orgAdmin"><label style="margin:0">Org admin</label></div>
         <div class="checkline"><input type="checkbox" id="s_master"><label style="margin:0">Office master</label></div>
       </div>
+      <div class="full" id="s_officeRow"><label>Office</label><select id="s_office"></select></div>
     </div>
     <div class="actions">
       <button class="btn-ghost" id="cancelStaff">Cancel</button>
@@ -997,6 +997,13 @@ function toast(msg) {
 }
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+// An HQ office's own name already spells out its org ("Head Office /
+// India (Diacrown)"), so appending " (DIACROWN)" after it just repeats the
+// same word twice. A branch office's name (e.g. "Sydney") has no org
+// context of its own, so it still needs the "(DIACROWN)" suffix appended.
+function officeLabel(o) {
+  return o.is_hq ? o.name : (o.name + (o.org_code ? ' (' + o.org_code + ')' : ''));
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
@@ -3047,9 +3054,36 @@ async function loadStaff() {
     };
   });
 }
+// The office field's whole shape follows whichever role checkbox is
+// ticked, not just its options list -- these three roles each mean a
+// fundamentally different kind of "office" to attach:
+//  - Global admin isn't scoped to any one office/org at all, so there's
+//    nothing meaningful to pick -- the field hides entirely (a valid office
+//    code is still sent to satisfy the required column, just not shown).
+//  - Org admin picks WHICH ORG they administer -- only the two HQ rows are
+//    valid choices, never a specific branch.
+//  - Office master (or no role at all -- plain Staff) picks their one home
+//    office, HQ or branch, from the full list -- exactly like today.
+// Priority order matches how the roles actually nest: Global admin wins
+// over everything if checked, then Org admin, then the full list.
+function updateStaffOfficeOptions() {
+  const row = $('s_officeRow');
+  const sel = $('s_office');
+  if ($('s_admin').checked) {
+    row.style.display = 'none';
+    sel.innerHTML = OFFICES.map(o => `<option value="${o.code}">${officeLabel(o)}</option>`).join('');
+  } else if ($('s_orgAdmin').checked) {
+    row.style.display = 'block';
+    sel.innerHTML = OFFICES.filter(o => o.is_hq).map(o => `<option value="${o.code}">${officeLabel(o)}</option>`).join('');
+  } else {
+    row.style.display = 'block';
+    sel.innerHTML = OFFICES.map(o => `<option value="${o.code}">${officeLabel(o)}</option>`).join('');
+  }
+}
+['s_admin', 's_orgAdmin', 's_master'].forEach(id => $(id).addEventListener('change', updateStaffOfficeOptions));
 $('newStaffBtn').onclick = () => {
-  $('s_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
   $('s_admin_row').style.display = USER.isGlobalAdmin ? 'flex' : 'none'; // only a global admin can grant global admin
+  updateStaffOfficeOptions();
   openSheet($('staffOverlay'));
 };
 $('cancelStaff').onclick = () => closeSheet($('staffOverlay'));
@@ -3089,7 +3123,7 @@ async function loadInvites() {
   }
 }
 $('newInviteBtn').onclick = () => {
-  $('inv_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${o.name}${o.org_code ? ' (' + o.org_code + ')' : ''}</option>`).join('');
+  $('inv_office').innerHTML = OFFICES.map(o => `<option value="${o.code}">${officeLabel(o)}</option>`).join('');
   openSheet($('inviteOverlay'));
 };
 $('cancelInvite').onclick = () => closeSheet($('inviteOverlay'));
