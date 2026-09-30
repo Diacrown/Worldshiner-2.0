@@ -29,7 +29,17 @@ Three services, all free to start: **Supabase** (database + image storage),
    (safe — it skips anything already applied) but does **not** auto-run
    `npm run seed` (see the comment in `render.yaml` for why). Run it once
    yourself: Render dashboard -> your service -> Shell tab ->
-   `npm run seed`.
+   `ALLOW_SEED_IN_PRODUCTION=1 npm run seed`.
+   The service runs with `NODE_ENV=production`, and the seed script refuses
+   to run in that mode unless `ALLOW_SEED_IN_PRODUCTION=1` is set — type it
+   in the Shell command, don't add it to the service's environment
+   variables. **The seed creates demo accounts** (a global admin, org
+   admins and staff at `@worldshiner.demo`, all with the password
+   `demo1234`, plus the invite code `DEMO-JOIN`). Right after seeding,
+   create your real admin account, then **deactivate every `@worldshiner.demo`
+   account and revoke `DEMO-JOIN`** (Staff screen -> Invite Codes), and never
+   re-run the seed against production afterwards: it resets those accounts'
+   passwords to `demo1234` and reactivates them.
 5. Note your API's URL (`https://worldshiner2-api.onrender.com` or similar).
 
 **Free-tier catch:** Render's free web services spin down after 15 minutes

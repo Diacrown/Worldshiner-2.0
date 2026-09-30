@@ -11,6 +11,12 @@ services:
     # in startCommand on purpose. Re-seeding resets the demo accounts'
     # passwords back to demo1234 every time, which you do NOT want happening
     # automatically after you've started using this for real.
+    # Because NODE_ENV=production below, the seed script refuses to run unless
+    # you explicitly override it:  ALLOW_SEED_IN_PRODUCTION=1 npm run seed
+    # (do NOT put that variable in this file or in the service's env vars).
+    # The demo accounts it creates (admin@worldshiner.demo etc., password
+    # demo1234, plus invite code DEMO-JOIN) MUST be deactivated / revoked
+    # straight afterwards — see docs/DEPLOYMENT.md.
     envVars:
       - key: DATABASE_URL
         sync: false   # set this to your Supabase connection string in Render's dashboard

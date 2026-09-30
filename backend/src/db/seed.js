@@ -11,6 +11,22 @@
 import bcrypt from 'bcryptjs';
 import { pool } from './pool.js';
 
+// This script creates demo accounts with a publicly known password (including
+// a global admin and org admins), a demo invite code, and RESETS those
+// accounts' passwords back to demo1234 on every run. Refuse to run against a
+// production environment unless that was explicitly intended.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED_IN_PRODUCTION !== '1') {
+  console.error(
+    '[seed] ❌ Refusing to run: NODE_ENV=production. Seeding creates demo accounts ' +
+    '(global admin, org admins, invite code DEMO-JOIN) with the well-known password demo1234 ' +
+    'and resets their passwords on every re-run.\n' +
+    '[seed] If you really mean to seed this environment (e.g. first deploy, to load offices and ' +
+    'status vocabularies), re-run with ALLOW_SEED_IN_PRODUCTION=1, then deactivate the demo ' +
+    'accounts and revoke DEMO-JOIN straight afterwards (see docs/DEPLOYMENT.md).'
+  );
+  process.exit(1);
+}
+
 // letter_prefix + next_design_value: S/B/K/T and their starting values come
 // directly from the real Firestore `counters` collection (designNo=1344,
 // designNoB=703, designNoK=541, designNoT=572) — NOT reset to 1, so newly
