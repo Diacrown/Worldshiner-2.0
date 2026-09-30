@@ -998,6 +998,14 @@ function toast(msg) {
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
+// Image/file URLs are only ever produced as absolute http(s) URLs (the
+// /uploads endpoint returns one; legacy imports only keep https?:// values),
+// so anything else (javascript:, data:, relative) is refused at render time.
+// Returns '' when the value is not usable; callers must still escapeHtml().
+function safeHttpUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  return /^https?:\/\//i.test(s) ? s : '';
+}
 // An HQ office's own name already spells out its org ("Head Office /
 // India (Diacrown)"), so appending " (DIACROWN)" after it just repeats the
 // same word twice. A branch office's name (e.g. "Sydney") has no org
@@ -2567,7 +2575,7 @@ async function issuePickFilter(q) {
   const box = $('issuePickResults');
   if (!jobs.length) { box.innerHTML = `<div style="padding:14px;color:var(--text2);font-size:13px">No jobs match that search.</div>`; return; }
   box.innerHTML = jobs.map(j => `
-    <button type="button" class="issue-pick-row${String(j.id) === String(issuePickJobId) ? ' sel' : ''}" onclick="selectIssueJob('${j.id}', '${escapeHtml(j.job_name).replace(/'/g, "\\'")}')">
+    <button type="button" class="issue-pick-row${String(j.id) === String(issuePickJobId) ? ' sel' : ''}" data-job-id="${escapeHtml(j.id)}" data-job-name="${escapeHtml(j.job_name)}">
       <div style="font-weight:600">${escapeHtml(j.job_name)}</div>
       <div style="color:var(--text2);font-size:11.5px">${escapeHtml(j.contact_person || '')} · ${escapeHtml(j.status_label || '')}</div>
     </button>`).join('');
@@ -2577,6 +2585,13 @@ function selectIssueJob(jobId, jobName) {
   $('issueFormJob').textContent = 'For: ' + jobName;
   $('issueFormWrap').style.display = 'block';
 }
+// Delegated click handler: the job id/name travel in data-* attributes
+// (never inside inline JS), so a job name can't break out into script.
+$('issuePickResults').addEventListener('click', (e) => {
+  const btn = e.target.closest('.issue-pick-row');
+  if (!btn) return;
+  selectIssueJob(btn.dataset.jobId, btn.dataset.jobName);
+});
 async function saveIssue() {
   if (!issuePickJobId) { toast('Pick a job first.'); return; }
   const description = $('issueDescription').value.trim();
@@ -2840,7 +2855,7 @@ async function loadChat(jobId) {
     <div class="chat-msg">
       <div class="meta">${escapeHtml(m.sender_name || 'Someone')} · ${new Date(m.created_at).toLocaleString()}</div>
       <div>${escapeHtml(m.body || '')}</div>
-      ${m.image_url ? `<img src="${m.image_url}" style="max-width:160px;border-radius:6px;margin-top:4px">` : ''}
+      ${safeHttpUrl(m.image_url) ? `<img src="${escapeHtml(safeHttpUrl(m.image_url))}" style="max-width:160px;border-radius:6px;margin-top:4px">` : ''}
     </div>`).join('') || '<p class="meta">No messages yet.</p>';
   staggerIn($('chatThread'), '.chat-msg');
   $('chatThread').scrollTop = $('chatThread').scrollHeight;
@@ -2861,11 +2876,15 @@ function isBrowserRenderableImage(url) {
 }
 async function loadImages(jobId) {
   const { images } = await api(`/jobs/${jobId}/images`);
-  $('imgGrid').innerHTML = images.map(img => `
-    <div class="thumb">${isBrowserRenderableImage(img.url)
-      ? `<img src="${img.url}" alt="">`
-      : `<a href="${img.url}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--s2);text-decoration:none;color:var(--text2);font-size:11px;text-align:center;padding:4px">📄 View file</a>`
-    }<button class="del" data-del="${img.id}">×</button></div>`).join('');
+  $('imgGrid').innerHTML = images.map(img => {
+    const url = safeHttpUrl(img.url);
+    return `
+    <div class="thumb">${!url ? ''
+      : isBrowserRenderableImage(url)
+      ? `<img src="${escapeHtml(url)}" alt="">`
+      : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--s2);text-decoration:none;color:var(--text2);font-size:11px;text-align:center;padding:4px">📄 View file</a>`
+    }<button class="del" data-del="${img.id}">×</button></div>`;
+  }).join('');
   $('imgGrid').querySelectorAll('button[data-del]').forEach(b => {
     b.onclick = async () => { await api(`/jobs/${CURRENT_JOB_ID}/images/${b.dataset.del}`, { method: 'DELETE' }); await loadImages(CURRENT_JOB_ID); };
   });
