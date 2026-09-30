@@ -5,7 +5,10 @@
 export function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const status = err.status || 500;
   if (status >= 500) {
+    // Real error stays in the server log only — DB errors, upstream API
+    // responses and config hints must not reach the client.
     console.error('[error]', err);
+    return res.status(status).json({ error: 'Internal server error' });
   }
   res.status(status).json({ error: err.message || 'Internal server error' });
 }

@@ -48,7 +48,8 @@ app.get('/api/health/deep', async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ ok: true, database: 'reachable', checkedAt });
   } catch (err) {
-    res.status(503).json({ ok: false, database: 'unreachable', error: err.message, checkedAt });
+    console.error('[health/deep] database check failed:', err);
+    res.status(503).json({ ok: false, database: 'unreachable', error: 'Database check failed', checkedAt });
   }
 });
 
