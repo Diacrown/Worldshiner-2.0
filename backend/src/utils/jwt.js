@@ -16,5 +16,9 @@ export function signToken(payload) {
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, SECRET);
+  const payload = jwt.verify(token, SECRET);
+  // Session tokens never carry a `purpose`. Special-purpose tokens signed with
+  // the same secret (e.g. the Gmail OAuth `state`) must not be usable as one.
+  if (payload && payload.purpose) throw new Error('Token is not a session token');
+  return payload;
 }

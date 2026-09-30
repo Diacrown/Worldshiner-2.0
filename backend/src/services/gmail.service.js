@@ -7,6 +7,7 @@ import { pool } from '../db/pool.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
 import jwt from 'jsonwebtoken';
 
+const GMAIL_STATE_PURPOSE = 'gmail-oauth';
 const OAUTH_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
 
 export function isGoogleConfigured() {
@@ -65,7 +66,10 @@ export async function listConnectedOfficeIds(orgId) {
 // carried through the `state` param instead, verified in the callback route.
 export function buildAuthUrl(user) {
   assertGoogleConfigured();
-  const state = jwt.sign({ sub: user.sub, officeId: user.officeId }, process.env.JWT_SECRET, { expiresIn: '10m' });
+  // `purpose` keeps this token from being interchangeable with a session token
+  // (both are signed with JWT_SECRET): verifyState() requires it, and
+  // utils/jwt.js verifyToken() refuses any token that carries a purpose.
+  const state = jwt.sign({ sub: user.sub, officeId: user.officeId, purpose: GMAIL_STATE_PURPOSE }, process.env.JWT_SECRET, { expiresIn: '10m' });
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI,
@@ -79,7 +83,9 @@ export function buildAuthUrl(user) {
 }
 
 export function verifyState(state) {
-  return jwt.verify(state, process.env.JWT_SECRET); // throws if expired/tampered
+  const payload = jwt.verify(state, process.env.JWT_SECRET, { algorithms: ['HS256'] }); // throws if expired/tampered
+  if (payload.purpose !== GMAIL_STATE_PURPOSE) throw new Error('Invalid OAuth state');
+  return payload;
 }
 
 export async function exchangeCodeForTokens(code) {
@@ -234,12 +240,38 @@ export async function listInboxCandidates(officeId, { query = 'in:inbox newer_th
   return details;
 }
 
+// Outgoing header hardening: a CR or LF in To/Subject would let the caller
+// inject extra headers (Bcc:, etc.) into the raw MIME message, and an
+// unbounded recipient list would turn the connected mailbox into a spam relay.
+const MAX_RECIPIENTS = 20;
+function assertSafeHeader(value, field) {
+  if (/[\r\n]/.test(String(value))) {
+    const err = new Error(`${field} must not contain line breaks`);
+    err.status = 400;
+    throw err;
+  }
+}
+function assertRecipientCount(count) {
+  if (count > MAX_RECIPIENTS) {
+    const err = new Error(`At most ${MAX_RECIPIENTS} recipients are allowed per send`);
+    err.status = 400;
+    throw err;
+  }
+}
+// A single `to` value can itself list several addresses.
+function countAddresses(to) {
+  return String(to).split(/[,;]/).filter((a) => a.trim()).length;
+}
+
 function buildMimeMessage({ to, subject, body }) {
   const lines = [`To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', body];
   return Buffer.from(lines.join('\r\n')).toString('base64url');
 }
 
 async function sendMessage(officeId, { to, subject, body }) {
+  assertSafeHeader(to, 'to');
+  assertSafeHeader(subject, 'subject');
+  assertRecipientCount(countAddresses(to));
   const accessToken = await getAccessToken(officeId);
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -261,6 +293,10 @@ export async function sendCadEmail(officeId, { to, subject, body }) {
 // No rate-limiting here yet — a known gap for scaffolding, worth adding
 // (a delay between sends, or a batch API call) before real bulk use.
 export async function sendBulkMail(officeId, { recipients, subject, body }) {
+  // Validate everything up front so a bad request fails before any mail goes out.
+  assertRecipientCount(recipients.length);
+  assertSafeHeader(subject, 'subject');
+  for (const to of recipients) assertSafeHeader(to, 'recipient');
   const results = [];
   for (const to of recipients) {
     try {
