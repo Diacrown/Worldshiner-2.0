@@ -5,10 +5,14 @@
 export function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const status = err.status || 500;
   if (status >= 500) {
-    // Real error stays in the server log only — DB errors, upstream API
-    // responses and config hints must not reach the client.
     console.error('[error]', err);
-    return res.status(status).json({ error: 'Internal server error' });
+  }
+  // Unexpected errors (no explicit status: database errors, bugs) keep their
+  // detail in the server log only. Errors a service threw ON PURPOSE with a
+  // status (501 "not configured", 502 upstream failure) carry a message written
+  // for the user, so those still reach the client unchanged.
+  if (!err.status) {
+    return res.status(500).json({ error: 'Internal server error' });
   }
   res.status(status).json({ error: err.message || 'Internal server error' });
 }
