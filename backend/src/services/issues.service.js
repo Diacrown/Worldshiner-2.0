@@ -68,7 +68,20 @@ export async function openIssue(user, jobId, { issueType, description }) {
   });
 }
 
+// Resolves an issue id to its job through the caller-scoped getJobById, so an
+// issue on a job the caller cannot see behaves exactly like a missing issue.
+// Returns false when the issue doesn't exist or isn't visible to the caller.
+async function canSeeIssue(user, issueId) {
+  const { rows } = await pool.query('SELECT job_id FROM job_issues WHERE id = $1', [issueId]);
+  if (!rows[0]) return false;
+  const job = await getJobById(user, rows[0].job_id);
+  return !!job;
+}
+
 export async function updateIssue(user, issueId, { action, note }) {
+  // Scope check runs before the transaction opens: getJobById uses its own
+  // pool connection, and we don't want to hold a client while waiting on another.
+  if (!(await canSeeIssue(user, issueId))) return null;
   return withTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM job_issues WHERE id = $1 FOR UPDATE', [issueId]);
     const issue = rows[0];
@@ -111,7 +124,8 @@ export async function updateIssue(user, issueId, { action, note }) {
   });
 }
 
-export async function getIssueEvents(issueId) {
+export async function getIssueEvents(user, issueId) {
+  if (!(await canSeeIssue(user, issueId))) return null;
   const { rows } = await pool.query(
     `SELECT e.*, u.display_name AS actor_name
      FROM job_issue_events e LEFT JOIN users u ON u.id = e.actor_user_id

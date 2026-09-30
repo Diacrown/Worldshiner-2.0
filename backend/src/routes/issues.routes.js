@@ -51,7 +51,8 @@ issuesRouter.patch('/issues/:id', async (req, res, next) => {
 
 issuesRouter.get('/issues/:id/events', async (req, res, next) => {
   try {
-    const events = await IssuesService.getIssueEvents(req.params.id);
+    const events = await IssuesService.getIssueEvents(req.user, req.params.id);
+    if (events === null) return res.status(404).json({ error: 'Issue not found' });
     res.json({ events });
   } catch (err) {
     next(err);

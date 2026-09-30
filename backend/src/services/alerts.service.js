@@ -1,5 +1,6 @@
 import { pool } from '../db/pool.js';
 import { buildScope } from './scope.js';
+import { getJobById } from './jobs.service.js';
 
 // Distinct from SLA breaches (time-in-status) — these are date/silence-driven,
 // matching the branch manual's three alert types exactly.
@@ -60,6 +61,10 @@ export async function listAlerts(user, { officeOverride } = {}) {
 }
 
 export async function snoozeJob(user, jobId, days = 10) {
+  // Only jobs the caller can see may be snoozed (same scoped lookup the job
+  // sub-resources use); the route turns null into a 404.
+  const job = await getJobById(user, jobId);
+  if (!job) return null;
   const { rows } = await pool.query(
     `UPDATE jobs SET snoozed_until = CURRENT_DATE + ($1 || ' days')::interval WHERE id = $2 RETURNING id, snoozed_until`,
     [days, jobId]
