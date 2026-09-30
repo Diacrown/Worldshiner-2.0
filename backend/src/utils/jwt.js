@@ -16,7 +16,9 @@ export function signToken(payload) {
 }
 
 export function verifyToken(token) {
-  const payload = jwt.verify(token, SECRET);
+  // signToken() uses jsonwebtoken's default (HS256) with a string secret;
+  // pin it so verification can never be talked into another algorithm.
+  const payload = jwt.verify(token, SECRET, { algorithms: ['HS256'] });
   // Session tokens never carry a `purpose`. Special-purpose tokens signed with
   // the same secret (e.g. the Gmail OAuth `state`) must not be usable as one.
   if (payload && payload.purpose) throw new Error('Token is not a session token');
