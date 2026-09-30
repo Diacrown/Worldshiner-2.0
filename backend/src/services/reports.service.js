@@ -158,9 +158,18 @@ export async function exportJobsCsv(user, { officeOverride, status, search } = {
   sql += ' ORDER BY j.created_at DESC';
   const { rows } = await pool.query(sql, params);
 
+  // Spreadsheet apps run a cell that starts with = + - @ (or tab/CR) as a
+  // formula, so a job name like =HYPERLINK(...) in an export would execute on
+  // whoever opens the file. Text cells starting with one of those get a
+  // leading ' (OWASP's recommended neutralisation); genuine numbers — a JS
+  // number, or a string that is entirely a plain decimal like "-5" or "+12.5" —
+  // are left untouched.
+  const isPlainNumber = (v) => typeof v === 'number'
+    || (typeof v === 'string' && /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(v));
   const escape = (v) => {
     if (v == null) return '';
-    const s = v instanceof Date ? v.toISOString() : String(v);
+    let s = v instanceof Date ? v.toISOString() : String(v);
+    if (!isPlainNumber(v) && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const headers = ['Job Name', 'Contact', 'Priority', 'Status', 'Office', 'PO Number', 'Design No', 'Delivery Date', 'Created At'];
