@@ -83,11 +83,16 @@ usersRouter.patch('/:id', requireOrgAdminOrAbove, async (req, res, next) => {
     if (!req.user.isGlobalAdmin) {
       // Org admin editing an existing user — confirm that user is actually in their org.
       const { rows: targetRows } = await pool.query(
-        `SELECT o.org_id FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = $1`, [req.params.id]
+        `SELECT o.org_id, u.is_global_admin FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = $1`, [req.params.id]
       );
       if (!targetRows.length) return res.status(404).json({ error: 'User not found' });
       if (targetRows[0].org_id !== req.user.orgId) {
         return res.status(403).json({ error: 'You can only edit staff within your own org' });
+      }
+      // An org admin must not be able to reset the password of, deactivate, or
+      // otherwise edit a global admin who happens to sit in their org.
+      if (targetRows[0].is_global_admin) {
+        return res.status(403).json({ error: 'Only a global admin can edit a global admin' });
       }
     }
     if (newPassword && newPassword.length < 8) {
