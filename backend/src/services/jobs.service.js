@@ -609,6 +609,13 @@ export async function addJobImage(user, jobId, { kind, url, clientItemId }) {
     err.status = 400;
     throw err;
   }
+  // Every legitimate image URL is an absolute http(s) URL: /uploads returns
+  // one, and the legacy import only keeps values matching /^https?:\/\//.
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    const err = new Error('url must be an http(s) URL');
+    err.status = 400;
+    throw err;
+  }
   const { rows } = await pool.query(
     `INSERT INTO job_images (job_id, client_item_id, kind, url) VALUES ($1,$2,$3,$4) RETURNING *`,
     [jobId, clientItemId || null, kind, url]

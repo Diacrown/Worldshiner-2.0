@@ -30,6 +30,11 @@ chatRouter.post('/jobs/:jobId/chat', async (req, res, next) => {
     if ((!body || !body.trim()) && !imageUrl) {
       return res.status(400).json({ error: 'Message needs a body or an image' });
     }
+    // Every legitimate image URL is an absolute http(s) URL: /uploads returns
+    // one, and the legacy import only keeps values matching /^https?:\/\//.
+    if (imageUrl && !(typeof imageUrl === 'string' && /^https?:\/\//i.test(imageUrl))) {
+      return res.status(400).json({ error: 'imageUrl must be an http(s) URL' });
+    }
     const { rows } = await pool.query(
       `INSERT INTO job_chat_messages (job_id, sender_user_id, body, image_url)
        VALUES ($1,$2,$3,$4) RETURNING *`,
