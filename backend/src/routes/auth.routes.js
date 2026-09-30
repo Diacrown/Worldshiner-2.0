@@ -57,23 +57,30 @@ async function findUserByGoogleSub(googleSub) {
   return rows[0] ?? null;
 }
 
-authRouter.post('/login', async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email and password are required' });
-  }
-  const user = await findUserByEmail(email);
-  if (!user) return res.status(401).json({ error: 'Invalid email or password' });
-  if (!user.password_hash) {
-    return res.status(401).json({ error: 'This account signs in with Google — use "Continue with Google" instead.' });
-  }
+authRouter.post('/login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body || {};
+    // typeof checks: a JSON body can carry numbers/objects here, and
+    // bcrypt.compare() throws on a non-string password (an unhandled rejection
+    // in an Express 4 async handler would take the process down).
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+      return res.status(400).json({ error: 'email and password are required' });
+    }
+    const user = await findUserByEmail(email);
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!user.password_hash) {
+      return res.status(401).json({ error: 'This account signs in with Google — use "Continue with Google" instead.' });
+    }
 
-  const ok = await bcrypt.compare(password, user.password_hash);
-  if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
 
-  const payload = tokenPayloadFor(user);
-  const token = signToken(payload);
-  res.json({ token, user: payload });
+    const payload = tokenPayloadFor(user);
+    const token = signToken(payload);
+    res.json({ token, user: payload });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Self-service sign-up, gated by an invite code (see services/invites.service.js).
